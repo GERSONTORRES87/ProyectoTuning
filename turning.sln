@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "turning.Web", "src\turning.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "turning.API.Tests", "tests\turning.API.Tests\turning.API.Tests.csproj", "{43E0247E-CA06-451D-AD85-1A75E0D76039}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "turning.Web.Tests", "tests\turning.Web.Tests\turning.Web.Tests.csproj", "{879D5E72-BDA8-4C60-92D6-81D972E0A41D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -143,6 +145,18 @@ Global
 		{43E0247E-CA06-451D-AD85-1A75E0D76039}.Release|x64.Build.0 = Release|Any CPU
 		{43E0247E-CA06-451D-AD85-1A75E0D76039}.Release|x86.ActiveCfg = Release|Any CPU
 		{43E0247E-CA06-451D-AD85-1A75E0D76039}.Release|x86.Build.0 = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|x64.Build.0 = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Debug|x86.Build.0 = Debug|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|x64.ActiveCfg = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|x64.Build.0 = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|x86.ActiveCfg = Release|Any CPU
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -157,5 +171,6 @@ Global
 		{C9D0E1F2-A3B4-5C6D-7E8F-A9B0C1D2E3F4} = {B2C3D4E5-F6A7-8B9C-0D1E-F2A3B4C5D6E7}
 		{DA133A53-4AD0-4D38-A6E6-A7C93F62828A} = {A1B2C3D4-E5F6-7A8B-9C0D-E1F2A3B4C5D6}
 		{43E0247E-CA06-451D-AD85-1A75E0D76039} = {B2C3D4E5-F6A7-8B9C-0D1E-F2A3B4C5D6E7}
+		{879D5E72-BDA8-4C60-92D6-81D972E0A41D} = {B2C3D4E5-F6A7-8B9C-0D1E-F2A3B4C5D6E7}
 	EndGlobalSection
 EndGlobal

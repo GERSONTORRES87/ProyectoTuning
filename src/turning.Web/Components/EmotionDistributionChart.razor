@@ -1,0 +1,100 @@
+@using System.Globalization
+
+<figure class="emotion-chart">
+    <figcaption>
+        <span class="emotion-chart-title">@Title</span>
+        <span class="emotion-chart-total">@ReadingCount(_total)</span>
+    </figcaption>
+
+    <div class="emotion-chart-scroll">
+        <svg class="emotion-chart-svg" viewBox="0 0 760 @ChartHeight" role="img" aria-labelledby="@(_chartId + "-title") @(_chartId + "-description")">
+            <title id="@(_chartId + "-title")">@Title</title>
+            <desc id="@(_chartId + "-description")">@ReadingCount(_total). @AccessibleSummary</desc>
+
+            @foreach (var tick in new[] { 0, 25, 50, 75, 100 })
+            {
+                <g class="emotion-chart-axis">
+                    <line x1="@Invariant(190 + tick * 3.7)" y1="20" x2="@Invariant(190 + tick * 3.7)" y2="@(ChartHeight - 34)" />
+                    <text x="@Invariant(190 + tick * 3.7)" y="@(ChartHeight - 12)" text-anchor="middle">@tick%</text>
+                </g>
+            }
+
+            @for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                var top = 30 + index * 54;
+                var percentage = item.Count * 100d / _total;
+                var label = $"{item.Label}: {ReadingCount(item.Count)}, {Percentage(percentage)}%";
+                <g class="emotion-chart-row">
+                    <text class="emotion-chart-label" x="8" y="@(top + 16)">@item.Label</text>
+                    <rect class="emotion-chart-track" x="190" y="@top" width="370" height="24" rx="8" />
+                    <rect class="emotion-chart-bar" x="190" y="@top" width="@Invariant(percentage * 3.7)" height="24" rx="8" fill="@item.Color" aria-label="@label">
+                        <title>@label</title>
+                    </rect>
+                    <text class="emotion-chart-value" x="580" y="@(top + 16)">@item.Count · @Percentage(percentage)%</text>
+                </g>
+            }
+
+            @if (_total == 0)
+            {
+                <g class="emotion-chart-empty">
+                    <text x="190" y="60">0 lecturas</text>
+                </g>
+            }
+        </svg>
+    </div>
+
+    @if (_total == 0)
+    {
+        <p class="emotion-chart-empty-message">Sin lecturas emocionales para mostrar.</p>
+    }
+</figure>
+
+@code {
+    [Parameter]
+    public IReadOnlyDictionary<string, int> Counts { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public string Title { get; set; } = "Distribución de emociones";
+
+    private sealed record EmotionValue(string Label, long Count, string Color);
+
+    private static readonly IReadOnlyDictionary<string, (string Label, string Color)> Emotions =
+        new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["joy"] = ("Alegría", "#D9B178"),
+            ["neutral"] = ("Neutral", "#8FA38A"),
+            ["sadness"] = ("Tristeza", "#BCA0AD"),
+            ["confusion"] = ("Confusión", "#A698BC"),
+            ["anger"] = ("Enojo", "#A87B64"),
+            ["surprise"] = ("Sorpresa", "#C4957A")
+        };
+
+    private readonly string _chartId = $"emotion-chart-{Guid.NewGuid():N}";
+    private List<EmotionValue> _items = new();
+    private long _total;
+    private int ChartHeight => Math.Max(140, _items.Count * 54 + 70);
+    private string AccessibleSummary => _total == 0
+        ? "Sin lecturas emocionales para mostrar."
+        : string.Join(". ", _items.Select(item => $"{item.Label}: {ReadingCount(item.Count)}, {Percentage(item.Count * 100d / _total)}%"));
+
+    protected override void OnParametersSet()
+    {
+        _items = Counts
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && pair.Value > 0)
+            .GroupBy(pair => pair.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var emotion = Emotions.GetValueOrDefault(group.Key, (group.Key, "#C4957A"));
+                return new EmotionValue(emotion.Item1, group.Sum(pair => (long)pair.Value), emotion.Item2);
+            })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Label, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _total = _items.Sum(item => item.Count);
+    }
+
+    private static string ReadingCount(long count) => $"{count} {(count == 1 ? "lectura" : "lecturas")}";
+    private static string Percentage(double percentage) => percentage.ToString("0.#", CultureInfo.GetCultureInfo("es-CO"));
+    private static string Invariant(double number) => number.ToString("0.###", CultureInfo.InvariantCulture);
+}

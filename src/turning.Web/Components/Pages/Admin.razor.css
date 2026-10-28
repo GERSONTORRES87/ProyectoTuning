@@ -1,0 +1,28 @@
+.admin-header, .admin-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.admin-header { align-items: flex-end; }
+.admin-refresh { width: auto; padding: 10px 20px; }
+.admin-toolbar { margin-bottom: 24px; }
+.admin-views { display: flex; padding: 5px; gap: 4px; border: 1px solid #dfcbbd; border-radius: 999px; background: #faf6ef; }
+.admin-view { border: 0; border-radius: 999px; padding: 11px 24px; background: transparent; color: #735b4e; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.admin-view.is-selected { background: #9d705b; color: white; box-shadow: 0 3px 8px #9d705b24; }
+.admin-view:disabled { cursor: wait; opacity: .65; }
+.admin-view:focus-visible, .admin-session summary:focus-visible { outline: 3px solid #75856c; outline-offset: 3px; }
+.admin-updated { color: #796b5e; font-size: 12px; margin: 0; }
+.admin-error { border: 1px solid #d6a7a1; color: #844a43; }
+.admin-error p { margin: 0 0 6px; }
+.admin-empty { border: 1px dashed #c7b49f; }
+.admin-empty .sue-subtitle { margin-top: 10px; max-width: 780px; }
+.admin-sessions-heading { margin: 32px 0 18px; }
+.admin-session summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; cursor: pointer; list-style: none; }
+.admin-session summary::-webkit-details-marker { display: none; }
+.admin-session summary::before { content: '+'; font-size: 22px; color: #9d705b; }
+.admin-session[open] summary::before { content: '−'; }
+.admin-session-name { font-weight: 800; color: #705d50; }
+.admin-session-badge { border-radius: 999px; background: #e3e8da; color: #52634b; font-size: 12px; font-weight: 800; padding: 5px 12px; }
+.admin-session-count { margin-left: auto; color: #796b5e; font-size: 13px; }
+.admin-session-info { margin: 24px 0 16px; }
+@media (max-width: 640px) {
+    .admin-toolbar { gap: 12px; }
+    .admin-session-count { width: 100%; margin-left: 26px; }
+    .admin-view { padding: 10px 20px; }
+}

@@ -1,0 +1,104 @@
+@using turning.Web.Surveys
+@using System.Globalization
+
+<section class="survey-results-panel">
+    <header class="survey-results-header">
+        <div>
+            <h2>@Title</h2>
+            <p>@(Submitted ? "Respuestas guardadas en esta encuesta." : "Revisa tus respuestas antes de enviar la encuesta.")</p>
+        </div>
+        <span class="survey-results-badge @(Submitted ? "is-submitted" : "is-preview")">
+            @(Submitted ? "Encuesta enviada" : "Vista previa · sin enviar")
+        </span>
+    </header>
+
+    @if (Definition is null || Definition.Questions.Count == 0)
+    {
+        <p class="survey-results-pending" role="status">No hay preguntas disponibles para mostrar.</p>
+    }
+    else
+    {
+        @if (!HasAnswers)
+        {
+            <p class="survey-results-pending" role="status">
+                @(Submitted ? "No hay respuestas registradas para esta encuesta." : "Pendiente: aún no hay respuestas para mostrar.")
+            </p>
+        }
+
+        @foreach (var question in Definition.Questions.OrderBy(question => question.Order))
+        {
+            var answer = AnswerFor(question.Code);
+            <article class="survey-result-question">
+                <h3>@question.Text</h3>
+
+                @if (string.IsNullOrWhiteSpace(answer))
+                {
+                    <p class="survey-result-unanswered">Sin respuesta.</p>
+                }
+                else if (IsRatingType(question.Type))
+                {
+                    @if (TryRating(answer, out var rating))
+                    {
+                        <div class="survey-result-rating-header">
+                            <span>Respuesta en escala de 1 a 5</span>
+                            <strong>@rating/5</strong>
+                        </div>
+                        <div class="survey-result-meter" role="meter" aria-label="@question.Text"
+                             aria-valuemin="1" aria-valuemax="5" aria-valuenow="@rating" aria-valuetext="@($"{rating} de 5")">
+                            @for (var segment = 1; segment <= 5; segment++)
+                            {
+                                <span class="survey-result-segment @(segment <= rating ? "is-filled" : null)" aria-hidden="true"></span>
+                            }
+                        </div>
+                        <div class="survey-result-scale" aria-hidden="true"><span>1</span><span>5</span></div>
+                    }
+                    else
+                    {
+                        <p class="survey-result-invalid" role="status">Respuesta no válida: la escala admite valores de 1 a 5.</p>
+                    }
+                }
+                else if (string.Equals(question.Type?.Trim(), "choice", StringComparison.OrdinalIgnoreCase))
+                {
+                    <p class="survey-result-comment">@ChoiceLabel(answer)</p>
+                }
+                else
+                {
+                    <p class="survey-result-comment">@answer</p>
+                }
+            </article>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public SurveyDefinitionDto Definition { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Answers { get; set; } = new Dictionary<string, string>();
+
+    [Parameter]
+    public bool Submitted { get; set; }
+
+    [Parameter]
+    public string Title { get; set; } = "Resultados por pregunta";
+
+    private bool HasAnswers => Definition.Questions.Any(question => !string.IsNullOrWhiteSpace(AnswerFor(question.Code)));
+
+    private string? AnswerFor(string code) => Answers.TryGetValue(code, out var answer) ? answer : null;
+
+    private static bool IsRatingType(string? type) =>
+        string.Equals(type?.Trim(), "likert-1-5", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type?.Trim(), "scale", StringComparison.OrdinalIgnoreCase);
+
+    private static string ChoiceLabel(string answer) => answer.Trim().ToLowerInvariant() switch
+    {
+        "human" => "Humano",
+        "ai" => "IA",
+        "unknown" or "unsure" => "No estoy seguro",
+        _ => answer
+    };
+
+    private static bool TryRating(string answer, out int rating) =>
+        int.TryParse(answer, NumberStyles.Integer, CultureInfo.InvariantCulture, out rating) && rating is >= 1 and <= 5;
+}

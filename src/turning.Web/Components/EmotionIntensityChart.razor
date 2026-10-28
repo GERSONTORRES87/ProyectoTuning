@@ -1,0 +1,78 @@
+@using System.Globalization
+
+<figure class="emotion-intensity-chart">
+    <figcaption>
+        <span class="emotion-intensity-title">@Title</span>
+        <span class="emotion-intensity-scale">Escala de 0 a 100%</span>
+    </figcaption>
+
+    <div class="emotion-intensity-scroll">
+        <svg class="emotion-intensity-svg" viewBox="0 0 620 @ChartHeight" role="img" aria-labelledby="@(_chartId + "-title") @(_chartId + "-description")">
+            <title id="@(_chartId + "-title")">@Title</title>
+            <desc id="@(_chartId + "-description")">Escala de 0 a 100%. @AccessibleSummary</desc>
+
+            @foreach (var tick in new[] { 0, 25, 50, 75, 100 })
+            {
+                <g class="emotion-intensity-axis">
+                    <line x1="@Invariant(140 + tick * 3.7)" y1="20" x2="@Invariant(140 + tick * 3.7)" y2="@(ChartHeight - 34)" />
+                    <text x="@Invariant(140 + tick * 3.7)" y="@(ChartHeight - 12)" text-anchor="middle">@tick%</text>
+                </g>
+            }
+
+            @for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                var top = 30 + index * 54;
+                var label = $"{item.Label}: {item.Level}%";
+                <g class="emotion-intensity-row">
+                    <text class="emotion-intensity-label" x="8" y="@(top + 16)">@item.Label</text>
+                    <rect class="emotion-intensity-track" x="140" y="@top" width="370" height="24" rx="8" />
+                    <rect class="emotion-intensity-bar" x="140" y="@top" width="@Invariant(item.Level * 3.7)" height="24" rx="8" fill="@item.Color" aria-label="@label">
+                        <title>@label</title>
+                    </rect>
+                    <text class="emotion-intensity-value" x="530" y="@(top + 16)">@item.Level%</text>
+                </g>
+            }
+        </svg>
+    </div>
+
+    @if (_items.Count == 0)
+    {
+        <p class="emotion-intensity-empty">No hay intensidades emocionales para mostrar.</p>
+    }
+</figure>
+
+@code {
+    [Parameter]
+    public IReadOnlyDictionary<string, int> Levels { get; set; } = new Dictionary<string, int>();
+
+    [Parameter]
+    public IReadOnlyDictionary<string, string> Colors { get; set; } = new Dictionary<string, string>();
+
+    [Parameter]
+    public string Title { get; set; } = "Intensidad por emoción";
+
+    private sealed record IntensityValue(string Label, int Level, string Color);
+
+    private readonly string _chartId = $"emotion-intensity-{Guid.NewGuid():N}";
+    private List<IntensityValue> _items = new();
+    private int ChartHeight => Math.Max(120, _items.Count * 54 + 70);
+    private string AccessibleSummary => _items.Count == 0
+        ? "No hay intensidades emocionales para mostrar."
+        : string.Join(". ", _items.Select(item => $"{item.Label}: {item.Level}%"));
+
+    protected override void OnParametersSet()
+    {
+        _items = Levels
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .Select(pair =>
+            {
+                var label = pair.Key.Trim();
+                var color = Colors.FirstOrDefault(candidate => string.Equals(candidate.Key.Trim(), label, StringComparison.OrdinalIgnoreCase)).Value;
+                return new IntensityValue(label, Math.Clamp(pair.Value, 0, 100), string.IsNullOrWhiteSpace(color) ? "#C4957A" : color);
+            })
+            .ToList();
+    }
+
+    private static string Invariant(double number) => number.ToString("0.###", CultureInfo.InvariantCulture);
+}

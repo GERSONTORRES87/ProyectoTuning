@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Administrator,Researcher")]
 
 @using System.Net
+@using System.Text.Json
 @using turning.Web.ExperimentSessions
 
 @implements IDisposable
@@ -9,128 +10,124 @@
 @inject NavigationManager NavigationManager
 @inject TokenAuthenticationStateProvider AuthStateProvider
 
-<PageTitle>SUE — Panel de Administración</PageTitle>
+<PageTitle>SUE — Estadísticas</PageTitle>
 
 <div class="sue-page">
-    <header class="sue-header" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;">
+    <header class="sue-header admin-header">
         <div>
             <p class="sue-eyebrow">▤ Administración</p>
-            <h1 class="sue-title">Emociones en sesiones activas</h1>
-            <p class="sue-subtitle">Estadísticas en vivo de las sesiones que se están ejecutando. Se actualiza cada 10 segundos.</p>
+            <h1 class="sue-title">Estadísticas emocionales</h1>
+            <p class="sue-subtitle">@(_isHistory ? "Lecturas de sesiones finalizadas, expiradas o canceladas." : "Lecturas de las sesiones que están activas en este momento.")</p>
         </div>
-        <button class="btn-ghost" style="width: auto; padding: 10px 20px;" @onclick="LoadAsync" disabled="@_isLoading">
+        <button class="btn-ghost admin-refresh" @onclick="LoadAsync" disabled="@_isLoading">
             @(_isLoading ? "Actualizando..." : "Actualizar")
         </button>
     </header>
 
+    <div class="admin-toolbar">
+        <div class="admin-views" role="group" aria-label="Vista de estadísticas">
+            <button class="admin-view @(!_isHistory ? "is-selected" : null)" aria-pressed="@(!_isHistory ? "true" : "false")"
+                    disabled="@_isLoading" @onclick="() => ChangeViewAsync(false)">En vivo</button>
+            <button class="admin-view @(_isHistory ? "is-selected" : null)" aria-pressed="@(_isHistory ? "true" : "false")"
+                    disabled="@_isLoading" @onclick="() => ChangeViewAsync(true)">Historial</button>
+        </div>
+        <p class="admin-updated" role="status" aria-live="polite">
+            @if (_lastUpdated is { } updated)
+            {
+                <span>Actualizado a las <time datetime="@updated.ToString("O")">@updated.ToString("HH:mm:ss")</time> · Cada 10 segundos</span>
+            }
+            else
+            {
+                <span>Actualización automática cada 10 segundos</span>
+            }
+        </p>
+    </div>
+
     @if (!string.IsNullOrWhiteSpace(_errorMessage))
     {
-        <div class="sue-card">
-            <p class="sue-info-value" style="color: #A87B64;">@_errorMessage</p>
+        <div class="sue-card admin-error" role="alert">
+            <p>@_errorMessage</p>
+            @if (_rows is not null)
+            {
+                <p>Se conserva la última actualización disponible.</p>
+            }
         </div>
     }
-    else if (_rows is null)
-    {
-        <div class="sue-card">
-            <p class="sue-info-value">Cargando estadísticas...</p>
-        </div>
-    }
-    else
-    {
-        var totalReadings = _totals.Values.Sum();
 
+    @if (_rows is null && string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="sue-card" role="status"><p class="sue-info-value">Cargando estadísticas...</p></div>
+    }
+    else if (_rows is not null)
+    {
         <div class="sue-stats-grid">
             <div class="sue-stat-card">
                 <div class="sue-stat-icon">◦</div>
                 <p class="sue-stat-value">@_rows.Count</p>
-                <p class="sue-stat-label">Sesiones activas</p>
+                <p class="sue-stat-label">@(_isHistory ? "Sesiones finalizadas" : "Sesiones activas")</p>
             </div>
             <div class="sue-stat-card">
                 <div class="sue-stat-icon">◇</div>
-                <p class="sue-stat-value">@totalReadings</p>
+                <p class="sue-stat-value">@_totals.Values.Sum()</p>
                 <p class="sue-stat-label">Lecturas emocionales</p>
             </div>
             <div class="sue-stat-card">
                 <div class="sue-stat-icon">○</div>
-                <p class="sue-stat-value">@(_totals.Count == 0 ? "—" : _totals.MaxBy(x => x.Value).Key)</p>
+                <p class="sue-stat-value">@PredominantEmotion</p>
                 <p class="sue-stat-label">Emoción predominante</p>
             </div>
             <div class="sue-stat-card">
                 <div class="sue-stat-icon">≈</div>
                 <p class="sue-stat-value">@_degraded</p>
-                <p class="sue-stat-label">Lecturas degradadas</p>
+                <p class="sue-stat-label">Lecturas de respaldo</p>
             </div>
         </div>
 
+        @if (_rows.Count == 0)
+        {
+            <div class="sue-card admin-empty" role="status">
+                <h2 class="sue-card-title">@(_isHistory ? "Aún no hay sesiones finalizadas" : "No hay sesiones activas")</h2>
+                <p class="sue-subtitle">
+                    @(_isHistory
+                        ? "Las lecturas aparecerán aquí cuando una sesión finalice, expire o sea cancelada."
+                        : "Cuando un participante inicie una conversación, sus lecturas aparecerán aquí. Puedes consultar las sesiones anteriores en Historial.")
+                </p>
+            </div>
+        }
+
         <div class="sue-card">
-            <h2 class="sue-card-title">Distribución global</h2>
-            @if (totalReadings == 0)
-            {
-                <p class="sue-subtitle">Aún no hay lecturas emocionales en sesiones activas.</p>
-            }
-            else
-            {
-                <div class="sue-emotions-grid">
-                    @foreach (var (emotion, count) in _totals.OrderByDescending(x => x.Value))
-                    {
-                        var pct = count * 100 / totalReadings;
-                        <div class="sue-emotion-card">
-                            <h3 class="sue-emotion-title">@emotion</h3>
-                            <div class="sue-emotion-bar">
-                                <div class="sue-emotion-fill" style="width: @(pct)%; background: @ColorOf(emotion);"></div>
-                            </div>
-                            <p class="sue-emotion-intensity">@count lecturas · @pct%</p>
-                        </div>
-                    }
-                </div>
-            }
+            <EmotionDistributionChart Counts="_totals" Title="@(_isHistory ? "Distribución de emociones · Historial" : "Distribución de emociones · En vivo")" />
         </div>
+
+        @if (_rows.Count > 0)
+        {
+            <h2 class="sue-card-title admin-sessions-heading">Detalle por sesión</h2>
+        }
 
         @foreach (var row in _rows)
         {
-            var rowTotal = row.Counts.Values.Sum();
-
-            <div class="sue-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <details class="sue-card admin-session" @key="row.Session.Id">
+                <summary>
+                    <span class="admin-session-name">@row.Session.SessionCode</span>
+                    <span class="admin-session-badge">@StatusLabel(row.Session.Status)</span>
+                    <span class="admin-session-count">@row.Counts.Values.Sum() lecturas · @row.Session.ConversationTurnCount mensajes</span>
+                </summary>
+                <div class="sue-info-grid admin-session-info">
                     <div>
-                        <p class="sue-info-label">Sesión</p>
-                        <h2 class="sue-card-title" style="margin: 4px 0 0;">@row.Session.SessionCode</h2>
+                        <p class="sue-info-label">Condición</p>
+                        <p class="sue-info-value">@(row.Session.Condition == "AI" ? "IA" : "Humana")</p>
                     </div>
-                    <span style="padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; background: rgba(181,196,177,0.4); color: var(--salvia-oscura);">
-                        • @row.Session.Condition
-                    </span>
-                </div>
-
-                <div class="sue-info-grid">
                     <div>
                         <p class="sue-info-label">Última emoción</p>
-                        <p class="sue-info-value">@(row.Session.LastDetectedEmotion ?? "—")</p>
+                        <p class="sue-info-value">@EmotionLabel(row.Session.LastDetectedEmotion)</p>
                     </div>
                     <div>
-                        <p class="sue-info-label">Mensajes</p>
-                        <p class="sue-info-value">@row.Session.ConversationTurnCount</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Lecturas</p>
-                        <p class="sue-info-value">@rowTotal</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Iniciada</p>
-                        <p class="sue-info-value">@row.Session.CreatedAtUtc.ToLocalTime().ToString("g")</p>
+                        <p class="sue-info-label">Creada</p>
+                        <p class="sue-info-value">@row.Session.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</p>
                     </div>
                 </div>
-
-                @foreach (var (emotion, count) in row.Counts.OrderByDescending(x => x.Value))
-                {
-                    var pct = count * 100 / rowTotal;
-                    <div style="margin-top: 14px;">
-                        <p class="sue-emotion-intensity">@emotion · @count (@pct%)</p>
-                        <div class="sue-emotion-bar">
-                            <div class="sue-emotion-fill" style="width: @(pct)%; background: @ColorOf(emotion);"></div>
-                        </div>
-                    </div>
-                }
-            </div>
+                <EmotionDistributionChart Counts="row.Counts" Title="@($"Emociones de {row.Session.SessionCode}")" />
+            </details>
         }
     }
 </div>
@@ -138,61 +135,88 @@
 @code {
     private sealed record Row(ExperimentSessionSnapshotDto Session, Dictionary<string, int> Counts);
 
-    private static readonly Dictionary<string, string> Colors = new()
-    {
-        ["joy"] = "#E8C9A0", ["neutral"] = "#B5C4B1", ["sadness"] = "#D4B8A7",
-        ["confusion"] = "#D5C4D4", ["anger"] = "#A87B64", ["surprise"] = "#C4957A"
-    };
-
     private List<Row>? _rows;
-    private Dictionary<string, int> _totals = new();
+    private Dictionary<string, int> _totals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource _disposeSource = new();
     private int _degraded;
     private bool _isLoading;
+    private bool _isHistory;
+    private bool _disposed;
     private string? _errorMessage;
+    private DateTimeOffset? _lastUpdated;
     private Timer? _timer;
+
+    private string PredominantEmotion => _totals.Count == 0 ? "—" : EmotionLabel(_totals.MaxBy(pair => pair.Value).Key);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
-        _timer = new Timer(_ => InvokeAsync(LoadAsync), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+        if (!_disposed)
+            _timer = new Timer(_ => _ = RefreshAsync(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
     }
 
-    private static string ColorOf(string emotion) => Colors.GetValueOrDefault(emotion.ToLowerInvariant(), "#C4957A");
+    private async Task RefreshAsync()
+    {
+        if (_disposed) return;
+        try { await InvokeAsync(LoadAsync); }
+        catch (ObjectDisposedException) when (_disposed) { }
+        catch (InvalidOperationException) when (_disposed) { }
+    }
+
+    private async Task ChangeViewAsync(bool history)
+    {
+        if (_isLoading || _isHistory == history || _disposed) return;
+        _isHistory = history;
+        _rows = null;
+        _totals = new(StringComparer.OrdinalIgnoreCase);
+        _degraded = 0;
+        _lastUpdated = null;
+        await LoadAsync();
+    }
 
     private async Task LoadAsync()
     {
-        if (_isLoading) return;
-
+        if (_isLoading || _disposed) return;
+        var cancellationToken = _disposeSource.Token;
         _isLoading = true;
         _errorMessage = null;
+        StateHasChanged();
 
         try
         {
-            var list = await ExperimentSessionApiClient.ListSessionsAsync();
+            var list = await ExperimentSessionApiClient.ListAllSessionsAsync(cancellationToken);
             var rows = new List<Row>();
-            var totals = new Dictionary<string, int>();
+            var totals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var degraded = 0;
 
-            foreach (var session in list.Items.Where(s => s.Status == "Active"))
+            foreach (var session in list.Items.Where(session => _isHistory
+                ? session.Status is "Completed" or "TimedOut" or "Cancelled"
+                : string.Equals(session.Status, "Active", StringComparison.OrdinalIgnoreCase)))
             {
-                var result = await ExperimentSessionApiClient.GetSessionResultAsync(session.Id);
-                var counts = result.EmotionReadings.GroupBy(r => r.Emotion).ToDictionary(g => g.Key, g => g.Count());
-                degraded += result.EmotionReadings.Count(r => r.IsDegraded);
-
+                var result = await ExperimentSessionApiClient.GetSessionResultAsync(session.Id, cancellationToken);
+                var counts = result.EmotionReadings
+                    .GroupBy(reading => reading.Emotion.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+                degraded += result.EmotionReadings.Count(reading => reading.IsDegraded);
                 foreach (var (emotion, count) in counts)
-                {
                     totals[emotion] = totals.GetValueOrDefault(emotion) + count;
-                }
-
                 rows.Add(new Row(session, counts));
             }
 
-            (_rows, _totals, _degraded) = (rows, totals, degraded);
+            if (!_disposed)
+            {
+                (_rows, _totals, _degraded) = (rows, totals, degraded);
+                _lastUpdated = DateTimeOffset.Now;
+            }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fadmin", replace: true);
+            if (!_disposed)
+            {
+                await AuthStateProvider.SignOutAsync();
+                NavigationManager.NavigateTo("/login?returnUrl=%2Fadmin", replace: true);
+            }
         }
         catch (ApiException exception)
         {
@@ -200,12 +224,43 @@
                 ? "Tu cuenta no tiene permiso para ver estas estadísticas."
                 : exception.Message;
         }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "No fue posible conectar con el servicio de estadísticas. Intenta actualizar de nuevo.";
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "El servicio tardó demasiado en responder. Intenta actualizar de nuevo.";
+        }
+        catch (JsonException)
+        {
+            _errorMessage = "No fue posible leer los datos del servicio de estadísticas.";
+        }
         finally
         {
             _isLoading = false;
-            StateHasChanged();
+            if (!_disposed) StateHasChanged();
         }
     }
 
-    public void Dispose() => _timer?.Dispose();
+    private static string StatusLabel(string status) => status switch
+    {
+        "Active" => "Activa", "Completed" => "Finalizada", "TimedOut" => "Expirada",
+        "Cancelled" => "Cancelada", _ => status
+    };
+
+    private static string EmotionLabel(string? emotion) => emotion?.Trim().ToLowerInvariant() switch
+    {
+        "joy" => "Alegría", "neutral" => "Neutral", "sadness" => "Tristeza",
+        "confusion" => "Confusión", "anger" => "Enojo", "surprise" => "Sorpresa",
+        null or "" => "—", _ => emotion
+    };
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+        _disposeSource.Cancel();
+        _disposeSource.Dispose();
+    }
 }

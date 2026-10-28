@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using turning.Web.Auth;
 using turning.Web.Components;
 using turning.Web.ExperimentSessions;
+using turning.Web.Surveys;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +34,12 @@ builder.Services.AddHttpClient<ExperimentSessionApiClient>((serviceProvider, cli
     var configuredBaseUrl = EnsureTrailingSlash(configuration["Api:BaseUrl"] ?? "https://localhost:5001");
     client.BaseAddress = new Uri(configuredBaseUrl, UriKind.Absolute);
 });
+builder.Services.AddHttpClient<SurveyApiClient>((serviceProvider, client) =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var configuredBaseUrl = EnsureTrailingSlash(configuration["Api:BaseUrl"] ?? "https://localhost:5001");
+    client.BaseAddress = new Uri(configuredBaseUrl, UriKind.Absolute);
+});
 
 var app = builder.Build();
 
@@ -49,8 +56,11 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+// El shell debe cargar para que el circuito reconstruya el token del navegador.
+// AuthorizeRouteView controla las paginas y la API valida sus propios permisos.
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .AllowAnonymous();
 
 app.Run();
 

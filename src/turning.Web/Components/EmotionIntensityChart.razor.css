@@ -1,0 +1,63 @@
+.emotion-intensity-chart {
+    margin: 0;
+}
+
+figcaption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.emotion-intensity-title {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--barro);
+}
+
+.emotion-intensity-scale,
+.emotion-intensity-empty {
+    color: var(--barro-claro);
+    font-size: 13px;
+}
+
+.emotion-intensity-scroll {
+    overflow-x: auto;
+}
+
+.emotion-intensity-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 360px;
+    font-family: var(--font-body, "Manrope", sans-serif);
+}
+
+.emotion-intensity-axis line {
+    stroke: var(--arena-media, #E8DCC8);
+    stroke-dasharray: 4 5;
+}
+
+.emotion-intensity-axis text {
+    fill: var(--barro-claro);
+    font-size: 12px;
+}
+
+.emotion-intensity-label,
+.emotion-intensity-value {
+    fill: var(--barro);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.emotion-intensity-track {
+    fill: var(--arena-media, #E8DCC8);
+    opacity: 0.45;
+}
+
+.emotion-intensity-empty {
+    margin: 8px 0 0;
+}

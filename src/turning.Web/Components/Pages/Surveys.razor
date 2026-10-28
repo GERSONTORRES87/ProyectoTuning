@@ -2,16 +2,299 @@
 @attribute [Authorize]
 @layout MainLayout
 
-<PageTitle>SUE — Encuestas</PageTitle>
+@using System.Globalization
+@using System.Net
+@using System.Text.Json
+@using turning.Web.Surveys
+
+@implements IDisposable
+@inject AuthApiClient AuthApiClient
+@inject SurveyApiClient SurveyApiClient
+@inject NavigationManager NavigationManager
+@inject TokenAuthenticationStateProvider AuthStateProvider
+
+<PageTitle>SUE — Encuestas de Bienestar</PageTitle>
 
 <div class="sue-page">
-    <header class="sue-header">
-        <p class="sue-eyebrow">○ Bienestar</p>
-        <h1 class="sue-title">Encuestas de Bienestar</h1>
-        <p class="sue-subtitle">Reflexiona a través de preguntas simples.</p>
+    <header class="sue-header surveys-header">
+        <div>
+            <p class="sue-eyebrow">○ Bienestar</p>
+            <h1 class="sue-title">Encuestas de Bienestar</h1>
+            <p class="sue-subtitle">@(_isAdmin ? "Respuestas y resultados de las encuestas de los agentes." : "Reflexiona a través de preguntas simples.")</p>
+        </div>
+        @if (_isAdmin)
+        {
+            <button class="btn-ghost surveys-refresh" @onclick="LoadAsync" disabled="@_isLoading">@(_isLoading ? "Actualizando..." : "Actualizar")</button>
+        }
     </header>
 
-    <div class="sue-card">
-        <p class="sue-info-value">Próximamente: encuestas interactivas con resultados.</p>
-    </div>
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="sue-card surveys-error" role="alert">
+            <p>@_errorMessage</p>
+            @if (_allResults is not null) { <p>Se conserva la última actualización disponible.</p> }
+        </div>
+    }
+
+    @if (_allResults is null && _isLoading)
+    {
+        <div class="sue-card" role="status"><p class="sue-info-value">Cargando encuestas...</p></div>
+    }
+    else if (_isAdmin && _allResults is not null)
+    {
+        <div class="surveys-filters">
+            <div class="surveys-filter">
+                <label for="survey-agent">Agente</label>
+                <select id="survey-agent" class="input-tierra" @bind="_agentFilter" @bind:after="ApplyFilters" disabled="@_isLoading">
+                    <option value="">Todos los agentes</option>
+                    @foreach (var agent in Agents)
+                    {
+                        <option value="@agent.Id">@agent.FullName · @agent.Email</option>
+                    }
+                </select>
+            </div>
+            <div class="surveys-filter">
+                <label for="survey-condition">Tipo de conversación</label>
+                <select id="survey-condition" class="input-tierra" @bind="_conditionFilter" @bind:after="ApplyFilters" disabled="@_isLoading">
+                    <option value="">Todos los tipos</option><option value="AI">IA</option><option value="Human">Humana</option>
+                </select>
+            </div>
+            @if (_lastUpdated is { } updated)
+            {
+                <p class="surveys-updated">Actualizado a las <time datetime="@updated.ToString("O")">@updated.ToString("HH:mm:ss")</time> · Cada 10 segundos</p>
+            }
+        </div>
+
+        <div class="sue-stats-grid">
+            <div class="sue-stat-card"><div class="sue-stat-icon">○</div><p class="sue-stat-value">@_visibleResults.Count</p><p class="sue-stat-label">Encuestas enviadas</p></div>
+            <div class="sue-stat-card"><div class="sue-stat-icon">◦</div><p class="sue-stat-value">@_visibleResults.Select(result => result.Participant.Id).Distinct().Count()</p><p class="sue-stat-label">Agentes con respuestas</p></div>
+            <div class="sue-stat-card"><div class="sue-stat-icon">◇</div><p class="sue-stat-value">@ScoreLabel(MeanFor("empathy"))</p><p class="sue-stat-label">Empatía promedio</p></div>
+            <div class="sue-stat-card"><div class="sue-stat-icon">◌</div><p class="sue-stat-value">@ScoreLabel(MeanFor("understanding"))</p><p class="sue-stat-label">Comprensión promedio</p></div>
+        </div>
+
+        <div class="sue-card">
+            <h2 class="sue-card-title">Balance de las respuestas</h2>
+            <p class="surveys-caption">Promedios de empatía y comprensión de las encuestas seleccionadas, en escala de 1 a 5.</p>
+            @foreach (var metric in new[] { ("empathy", "Empatía"), ("understanding", "Comprensión") })
+            {
+                var mean = MeanFor(metric.Item1);
+                <div class="surveys-mean-row">
+                    <div class="surveys-mean-label"><span>@metric.Item2</span><strong>@ScoreLabel(mean)</strong></div>
+                    @if (mean is { } value)
+                    {
+                        <div class="surveys-mean-track" role="meter" aria-label="@metric.Item2" aria-valuemin="1" aria-valuemax="5"
+                             aria-valuenow="@Invariant(value)" aria-valuetext="@ScoreLabel(mean)">
+                            <span style="@($"width: {Invariant(value * 20)}%")"></span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="surveys-mean-track is-empty" aria-hidden="true"></div>
+                        <p class="surveys-caption">Sin respuestas en esta escala.</p>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (_visibleResults.Count == 0)
+        {
+            <div class="sue-card surveys-empty" role="status">
+                <h2 class="sue-card-title">Aún no hay encuestas enviadas</h2>
+                <p class="surveys-caption">@(_allResults.Count == 0
+                    ? "Los resultados aparecerán cuando los agentes envíen la encuesta al finalizar su sesión."
+                    : "No hay respuestas para los filtros seleccionados. Prueba con otro agente o tipo de conversación.")</p>
+            </div>
+        }
+        else
+        {
+            <div class="sue-card">
+                <h2 class="sue-card-title">Encuestas por agente</h2>
+                <div class="surveys-table-wrap">
+                    <table class="surveys-table">
+                        <thead><tr><th scope="col">Agente</th><th scope="col">Sesión</th><th scope="col">Tipo</th><th scope="col">Enviada</th><th scope="col">Resultados</th></tr></thead>
+                        <tbody>
+                            @foreach (var result in PageResults)
+                            {
+                                <tr class="@(result.ResponseId == _selectedResponseId ? "is-selected" : null)" @key="result.ResponseId">
+                                    <td><strong>@result.Participant.FullName</strong><small>@result.Participant.Email</small></td>
+                                    <td>@result.SessionCode</td><td>@ConditionLabel(result.Condition)</td>
+                                    <td>@result.SubmittedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td><button aria-label="@($"Ver encuesta de {result.Participant.FullName}, sesión {result.SessionCode}")"
+                                                aria-pressed="@(result.ResponseId == _selectedResponseId ? "true" : "false")"
+                                                @onclick="() => SelectResult(result.ResponseId)">Ver resultados</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="surveys-pagination">
+                    <p>Página @_page de @PageCount · @_visibleResults.Count encuestas</p>
+                    <button class="btn-ghost" @onclick="PreviousPage" disabled="@(_page <= 1)">Anterior</button>
+                    <button class="btn-ghost" @onclick="NextPage" disabled="@(_page >= PageCount)">Siguiente</button>
+                </div>
+            </div>
+        }
+
+        @if (SelectedResult is { } selected)
+        {
+            <div class="sue-card">
+                <div class="surveys-detail-header">
+                    <div><p class="sue-info-label">Resultados del agente</p><h2 class="sue-card-title">@selected.Participant.FullName</h2><p class="surveys-caption">@selected.Participant.Email</p></div>
+                    <div><p class="sue-info-label">Sesión</p><p class="sue-info-value">@selected.SessionCode</p></div>
+                    <div><p class="sue-info-label">Encuesta</p><p class="sue-info-value">@($"{selected.Definition.Code} · v{selected.Definition.Version}")</p></div>
+                </div>
+                <SurveyResultsPanel Definition="selected.Definition" Answers="SelectedAnswers" Submitted="true" Title="Respuestas del agente" />
+            </div>
+        }
+    }
+    else if (_loaded && !_isAdmin)
+    {
+        <div class="sue-card"><p class="sue-info-value">Próximamente: encuestas interactivas con resultados.</p></div>
+    }
 </div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "sessionId")]
+    public Guid? SessionId { get; set; }
+
+    private const int PageSize = 10;
+    private IReadOnlyList<AdminSurveyResultDto>? _allResults;
+    private List<AdminSurveyResultDto> _visibleResults = [];
+    private readonly CancellationTokenSource _disposeSource = new();
+    private string _agentFilter = string.Empty;
+    private string _conditionFilter = string.Empty;
+    private string? _errorMessage;
+    private Guid? _selectedResponseId;
+    private DateTimeOffset? _lastUpdated;
+    private bool _isAdmin;
+    private bool _isLoading;
+    private bool _loaded;
+    private bool _disposed;
+    private int _page = 1;
+    private Timer? _timer;
+
+    private IEnumerable<SurveyParticipantDto> Agents => (_allResults ?? []).Select(result => result.Participant).DistinctBy(agent => agent.Id).OrderBy(agent => agent.FullName);
+    private int PageCount => Math.Max(1, (_visibleResults.Count + PageSize - 1) / PageSize);
+    private IEnumerable<AdminSurveyResultDto> PageResults => _visibleResults.Skip((_page - 1) * PageSize).Take(PageSize);
+    private AdminSurveyResultDto? SelectedResult => _visibleResults.FirstOrDefault(result => result.ResponseId == _selectedResponseId);
+    private IReadOnlyDictionary<string, string> SelectedAnswers => SelectedResult is { } selected
+        ? selected.Definition.Questions.ToDictionary(question => question.Code,
+            question => selected.Answers.FirstOrDefault(answer => answer.QuestionId == question.Id)?.Value ?? string.Empty)
+        : new Dictionary<string, string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        if (_isAdmin && !_disposed) _timer = new Timer(_ => _ = RefreshAsync(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_disposed) return;
+        try { await InvokeAsync(LoadAsync); }
+        catch (ObjectDisposedException) when (_disposed) { }
+        catch (InvalidOperationException) when (_disposed) { }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_isLoading || _disposed) return;
+        var cancellationToken = _disposeSource.Token;
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+        try
+        {
+            var user = await AuthApiClient.GetCurrentUserAsync();
+            _isAdmin = user.Role is "Administrator" or "Researcher";
+            if (_isAdmin)
+            {
+                var results = await SurveyApiClient.GetAdminResultsAsync(cancellationToken);
+                if (!_disposed)
+                {
+                    _allResults = results.OrderByDescending(result => result.SubmittedAtUtc).ToArray();
+                    UpdateSelection();
+                    _lastUpdated = DateTimeOffset.Now;
+                }
+            }
+            _loaded = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            if (!_disposed)
+            {
+                await AuthStateProvider.SignOutAsync();
+                NavigationManager.NavigateTo("/login?returnUrl=%2Fsurveys", replace: true);
+            }
+        }
+        catch (ApiException exception)
+        {
+            _errorMessage = exception.StatusCode == HttpStatusCode.Forbidden ? "Tu cuenta no tiene permiso para consultar las encuestas de los agentes." : exception.Message;
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "No fue posible conectar con el servicio de encuestas. Intenta actualizar de nuevo.";
+        }
+        catch (JsonException)
+        {
+            _errorMessage = "No fue posible leer los resultados de las encuestas.";
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "El servicio tardó demasiado en responder. Intenta actualizar de nuevo.";
+        }
+        finally
+        {
+            _isLoading = false;
+            if (!_disposed) StateHasChanged();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _page = 1;
+        _selectedResponseId = null;
+        UpdateSelection();
+    }
+
+    private void UpdateSelection()
+    {
+        _visibleResults = (_allResults ?? []).Where(result =>
+            (string.IsNullOrWhiteSpace(_agentFilter) || result.Participant.Id.ToString() == _agentFilter)
+            && (string.IsNullOrWhiteSpace(_conditionFilter) || string.Equals(result.Condition, _conditionFilter, StringComparison.OrdinalIgnoreCase))).ToList();
+        _page = Math.Min(_page, PageCount);
+        if (!_visibleResults.Any(result => result.ResponseId == _selectedResponseId))
+            _selectedResponseId = _visibleResults.FirstOrDefault(result => result.SessionId == SessionId)?.ResponseId ?? _visibleResults.FirstOrDefault()?.ResponseId;
+    }
+
+    private double? MeanFor(string code)
+    {
+        var values = new List<double>();
+        foreach (var result in _visibleResults)
+        {
+            var question = result.Definition.Questions.FirstOrDefault(question => string.Equals(question.Code, code, StringComparison.OrdinalIgnoreCase));
+            if (question is null || !(string.Equals(question.Type?.Trim(), "scale", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(question.Type?.Trim(), "likert-1-5", StringComparison.OrdinalIgnoreCase))) continue;
+            var answer = result.Answers.FirstOrDefault(answer => answer.QuestionId == question.Id);
+            if (int.TryParse(answer?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value is >= 1 and <= 5)
+                values.Add(value);
+        }
+        return values.Count == 0 ? null : values.Average();
+    }
+
+    private static string ScoreLabel(double? score) => score is { } value ? value.ToString("0.#", CultureInfo.GetCultureInfo("es-CO")) + "/5" : "—";
+    private static string Invariant(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+    private static string ConditionLabel(string condition) => condition == "AI" ? "IA" : condition == "Human" ? "Humana" : condition;
+    private void SelectResult(Guid responseId) => _selectedResponseId = responseId;
+    private void PreviousPage() { if (_page > 1) _page--; }
+    private void NextPage() { if (_page < PageCount) _page++; }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+        _disposeSource.Cancel();
+        _disposeSource.Dispose();
+    }
+}

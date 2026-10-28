@@ -2,8 +2,10 @@
 @attribute [Authorize(Roles = "Administrator,Researcher")]
 
 @using System.Net
+@using System.Text.Json
 @using turning.Web.ExperimentSessions
 
+@implements IDisposable
 @inject ExperimentSessionApiClient ExperimentSessionApiClient
 @inject NavigationManager NavigationManager
 @inject TokenAuthenticationStateProvider AuthStateProvider
@@ -12,169 +14,333 @@
 <PageTitle>SUE — Resultados y Análisis</PageTitle>
 
 <div class="sue-page">
-    <header class="sue-header">
-        <p class="sue-eyebrow">▤ Insights</p>
-        <h1 class="sue-title">Resultados y Análisis</h1>
-        <p class="sue-subtitle">Un resumen visual de tu viaje emocional.</p>
+    <header class="sue-header results-header">
+        <div>
+            <p class="sue-eyebrow">▤ Análisis</p>
+            <h1 class="sue-title">Resultados y Análisis</h1>
+            <p class="sue-subtitle">Resumen de las sesiones registradas y sus lecturas emocionales.</p>
+        </div>
+        <div class="results-actions">
+            <button class="btn-ghost" @onclick="LoadAsync" disabled="@_isLoading">@(_isLoading ? "Actualizando..." : "Actualizar")</button>
+            <button class="btn-ghost" @onclick="ExportReportAsync" disabled="@(!CanExport)">
+                @(_isExporting ? "Exportando..." : "Exportar reporte (JSON)")
+            </button>
+        </div>
     </header>
 
-    @if (_isLoading)
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
     {
-        <div class="sue-card">
-            <p class="sue-info-value">Cargando análisis...</p>
+        <div class="sue-card results-error" role="alert">
+            <p>@_errorMessage</p>
+            @if (_report is not null)
+            {
+                <p>Se muestra la última actualización disponible.</p>
+            }
         </div>
     }
-    else if (!string.IsNullOrWhiteSpace(_errorMessage))
+    @if (!string.IsNullOrWhiteSpace(_exportError))
     {
-        <div class="sue-card">
-            <p class="sue-info-value" style="color: #A87B64;">@_errorMessage</p>
-        </div>
+        <div class="sue-card results-error" role="alert"><p>@_exportError</p></div>
     }
-    else
+
+    @if (_report is null && _isLoading)
     {
-        <!-- Stat cards -->
+        <div class="sue-card" role="status"><p class="sue-info-value">Cargando análisis...</p></div>
+    }
+    else if (_report is not null)
+    {
+        <div class="results-filters">
+            <div class="results-filter">
+                <label for="results-status">Estado de la sesión</label>
+                <select id="results-status" class="input-tierra" @bind="_statusFilter" @bind:after="OnFiltersChanged" disabled="@_isLoading">
+                    <option value="">Todos los estados</option>
+                    <option value="Created">Creada</option>
+                    <option value="Active">Activa</option>
+                    <option value="Completed">Finalizada</option>
+                    <option value="TimedOut">Expirada</option>
+                    <option value="Cancelled">Cancelada</option>
+                </select>
+            </div>
+            <div class="results-filter">
+                <label for="results-condition">Tipo de conversación</label>
+                <select id="results-condition" class="input-tierra" @bind="_conditionFilter" @bind:after="OnFiltersChanged" disabled="@_isLoading">
+                    <option value="">Todos los tipos</option>
+                    <option value="AI">IA</option>
+                    <option value="Human">Humana</option>
+                </select>
+            </div>
+            @if (_lastUpdated is { } updated)
+            {
+                <p class="results-updated">Actualizado a las <time datetime="@updated.ToString("O")">@updated.ToString("HH:mm:ss")</time></p>
+            }
+        </div>
+
         <div class="sue-stats-grid">
             <div class="sue-stat-card">
-                <div class="sue-stat-icon">◦</div>
-                <p class="sue-stat-value">@(_session is not null ? "1" : "0")</p>
-                <p class="sue-stat-label">Sesiones totales</p>
+                <div class="sue-stat-icon">◦</div><p class="sue-stat-value">@_report.TotalSessions</p><p class="sue-stat-label">Sesiones totales</p>
             </div>
             <div class="sue-stat-card">
-                <div class="sue-stat-icon">◌</div>
-                <p class="sue-stat-value">78%</p>
-                <p class="sue-stat-label">Bienestar promedio</p>
+                <div class="sue-stat-icon">◌</div><p class="sue-stat-value">@_report.TotalMessages</p><p class="sue-stat-label">Mensajes</p>
             </div>
             <div class="sue-stat-card">
-                <div class="sue-stat-icon">◇</div>
-                <p class="sue-stat-value">@(_session?.LastDetectedEmotion ?? "Calma")</p>
-                <p class="sue-stat-label">Emoción top</p>
+                <div class="sue-stat-icon">◇</div><p class="sue-stat-value">@_report.TotalReadings</p><p class="sue-stat-label">Lecturas emocionales</p>
             </div>
             <div class="sue-stat-card">
-                <div class="sue-stat-icon">○</div>
-                <p class="sue-stat-value">84%</p>
-                <p class="sue-stat-label">Conexión</p>
+                <div class="sue-stat-icon">○</div><p class="sue-stat-value">@EmotionLabel(_report.PredominantEmotion)</p><p class="sue-stat-label">Emoción predominante</p>
             </div>
         </div>
 
-        <!-- Gráficos -->
-        <div class="sue-two-cols">
-            <div class="sue-card">
-                <h2 class="sue-card-title">Emociones de la semana</h2>
-                <div style="margin-top: 20px; height: 300px;">
-                    <canvas id="resultsBar"></canvas>
-                </div>
+        @if (_report.TotalSessions == 0)
+        {
+            <div class="sue-card results-empty" role="status">
+                <h2 class="sue-card-title">No hay sesiones para mostrar</h2>
+                <p class="results-caption">@(_allSessions.Count == 0 ? "Los resultados aparecerán cuando se registren sesiones." : "Prueba con otro estado o tipo de conversación.")</p>
             </div>
+        }
 
+        <div class="results-overview">
             <div class="sue-card">
-                <h2 class="sue-card-title">Sesión reciente</h2>
-
-                @if (_session is null)
+                <EmotionDistributionChart Counts="_report.EmotionCounts" Title="Distribución de emociones" />
+                <p class="results-caption">Lecturas de las sesiones seleccionadas. @_report.DegradedReadings lecturas de respaldo.</p>
+            </div>
+            <div class="sue-card">
+                <h2 class="sue-card-title">Estado de las sesiones</h2>
+                @if (_report.StatusCounts.Count == 0)
                 {
-                    <p class="sue-subtitle" style="margin-top: 16px;">
-                        Aún no tienes sesiones registradas.
-                    </p>
+                    <p class="results-caption">Sin sesiones en esta selección.</p>
                 }
                 else
                 {
-                    <div style="margin-top: 16px; overflow-x: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                            <thead>
-                                <tr style="border-bottom: 1px solid rgba(212, 184, 167, 0.4); color: var(--barro-claro); text-align: left;">
-                                    <th style="padding: 12px 8px;">Sesión</th>
-                                    <th style="padding: 12px 8px;">Fecha</th>
-                                    <th style="padding: 12px 8px;">Emoción</th>
-                                    <th style="padding: 12px 8px;">Mensajes</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr style="border-bottom: 1px solid rgba(212, 184, 167, 0.2);">
-                                    <td style="padding: 12px 8px; font-weight: 700;">@_session.SessionCode</td>
-                                    <td style="padding: 12px 8px;">@_session.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy")</td>
-                                    <td style="padding: 12px 8px;">@(_session.LastDetectedEmotion ?? "—")</td>
-                                    <td style="padding: 12px 8px;">@_session.ConversationTurnCount</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <dl class="results-states">
+                        @foreach (var entry in _report.StatusCounts.OrderByDescending(entry => entry.Value))
+                        {
+                            <div><dt>@StatusLabel(entry.Key)</dt><dd>@entry.Value</dd></div>
+                        }
+                    </dl>
                 }
-
-                <button class="btn-ghost" style="margin-top: 20px; width: auto; padding: 12px 24px;"
-                        @onclick="ExportReportAsync">
-                    ▤ Exportar reporte
-                </button>
+                <p class="results-caption">Las sesiones creadas pueden no tener mensajes ni lecturas todavía.</p>
+                <a href="/admin">Ver estadísticas en vivo</a>
             </div>
         </div>
+
+        @if (_report.TotalSessions > 0)
+        {
+            <div class="sue-card">
+                <h2 class="sue-card-title">Sesiones de la selección</h2>
+                <div class="results-table-wrap">
+                    <table class="results-table">
+                        <thead><tr><th scope="col">Sesión</th><th scope="col">Creada</th><th scope="col">Tipo</th><th scope="col">Estado</th><th scope="col">Mensajes</th><th scope="col">Lecturas</th><th scope="col">Análisis</th></tr></thead>
+                        <tbody>
+                            @foreach (var session in VisibleSessions)
+                            {
+                                <tr class="@(session.Id == _selectedSessionId ? "is-selected" : null)" @key="session.Id">
+                                    <td>@session.SessionCode</td>
+                                    <td>@session.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                    <td>@ConditionLabel(session.Condition)</td>
+                                    <td>@StatusLabel(session.Status)</td>
+                                    <td>@session.ConversationTurnCount</td>
+                                    <td>@session.EmotionSampleCount</td>
+                                    <td><button aria-label="@($"Ver análisis de {session.SessionCode}")" aria-pressed="@(session.Id == _selectedSessionId ? "true" : "false")" @onclick="() => SelectSession(session.Id)">Ver</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="results-pagination">
+                    <p>@PageStart–@PageEnd de @_report.TotalSessions sesiones · Página @_page de @PageCount</p>
+                    <button class="btn-ghost" @onclick="PreviousPage" disabled="@(_page <= 1)">Anterior</button>
+                    <button class="btn-ghost" @onclick="NextPage" disabled="@(_page >= PageCount)">Siguiente</button>
+                </div>
+            </div>
+        }
+
+        @if (SelectedSession is { } selected)
+        {
+            <div class="sue-card">
+                <h2 class="sue-card-title">Análisis de @selected.SessionCode</h2>
+                <div class="sue-info-grid results-detail-meta">
+                    <div><p class="sue-info-label">Estado</p><p class="sue-info-value">@StatusLabel(selected.Status)</p></div>
+                    <div><p class="sue-info-label">Tipo</p><p class="sue-info-value">@ConditionLabel(selected.Condition)</p></div>
+                    <div><p class="sue-info-label">Mensajes</p><p class="sue-info-value">@selected.ConversationTurnCount</p></div>
+                    <div><p class="sue-info-label">Última emoción</p><p class="sue-info-value">@EmotionLabel(selected.LastDetectedEmotion)</p></div>
+                </div>
+                <EmotionDistributionChart Counts="SelectedEmotionCounts" Title="Emociones de esta sesión" />
+            </div>
+        }
     }
 </div>
 
 @code {
-    private ExperimentSessionSnapshotDto? _session;
-    private bool _isLoading = true;
+    private const int PageSize = 10;
+    private IReadOnlyList<ExperimentSessionSnapshotDto> _allSessions = [];
+    private IReadOnlyList<SessionResultDto> _allDetails = [];
+    private ResultsAnalysisReport? _report;
+    private readonly CancellationTokenSource _disposeSource = new();
+    private string _statusFilter = string.Empty;
+    private string _conditionFilter = string.Empty;
     private string? _errorMessage;
+    private string? _exportError;
+    private DateTimeOffset? _lastUpdated;
+    private Guid? _selectedSessionId;
+    private int _page = 1;
+    private bool _isLoading;
+    private bool _isExporting;
+    private bool _disposed;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync();
-    }
+    private bool CanExport => !_isLoading && !_isExporting && _report is { TotalSessions: > 0 } && string.IsNullOrWhiteSpace(_errorMessage);
+    private int PageCount => Math.Max(1, ((_report?.TotalSessions ?? 0) + PageSize - 1) / PageSize);
+    private int PageStart => _report is { TotalSessions: > 0 } ? (_page - 1) * PageSize + 1 : 0;
+    private int PageEnd => Math.Min(_page * PageSize, _report?.TotalSessions ?? 0);
+    private IEnumerable<ExperimentSessionSnapshotDto> VisibleSessions => _report?.Sessions.Skip((_page - 1) * PageSize).Take(PageSize) ?? [];
+    private ExperimentSessionSnapshotDto? SelectedSession => _selectedSessionId is { } id ? _report?.Sessions.FirstOrDefault(session => session.Id == id) : null;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !_isLoading && string.IsNullOrWhiteSpace(_errorMessage))
-        {
-            await DrawBarAsync();
-        }
-    }
+    private IReadOnlyDictionary<string, int> SelectedEmotionCounts => _report?.Details
+        .FirstOrDefault(detail => detail.Session.Id == _selectedSessionId)?.EmotionReadings
+        .GroupBy(reading => reading.Emotion.Trim(), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase)
+        ?? new Dictionary<string, int>();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
 
     private async Task LoadAsync()
     {
+        if (_isLoading || _disposed) return;
+        var cancellationToken = _disposeSource.Token;
         _isLoading = true;
         _errorMessage = null;
+        _exportError = null;
+        StateHasChanged();
 
         try
         {
-            _session = await ExperimentSessionApiClient.GetLatestAsync();
+            var list = await ExperimentSessionApiClient.ListAllSessionsAsync(cancellationToken);
+            var sessions = list.Items.DistinctBy(session => session.Id).ToArray();
+            var details = new List<SessionResultDto>();
+            foreach (var session in sessions.Where(session => session.EmotionSampleCount > 0))
+                details.Add(await ExperimentSessionApiClient.GetSessionResultAsync(session.Id, cancellationToken));
+
+            if (!_disposed)
+            {
+                (_allSessions, _allDetails) = (sessions, details);
+                UpdateReport();
+                _lastUpdated = DateTimeOffset.Now;
+            }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
         {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fresults", replace: true);
+            if (!_disposed)
+            {
+                await AuthStateProvider.SignOutAsync();
+                NavigationManager.NavigateTo("/login?returnUrl=%2Fresults", replace: true);
+            }
         }
         catch (ApiException exception)
         {
-            _errorMessage = exception.Message;
+            _errorMessage = exception.StatusCode switch
+            {
+                HttpStatusCode.Forbidden => "Tu cuenta no tiene permiso para consultar estos resultados.",
+                HttpStatusCode.NotFound => "Una sesión dejó de estar disponible. Actualiza para volver a cargar el informe completo.",
+                _ => exception.Message
+            };
+        }
+        catch (HttpRequestException)
+        {
+            _errorMessage = "No fue posible conectar con el servicio de resultados. Intenta actualizar de nuevo.";
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "El servicio tardó demasiado en responder. Intenta actualizar de nuevo.";
+        }
+        catch (JsonException)
+        {
+            _errorMessage = "No fue posible leer los datos del servicio de resultados.";
         }
         finally
         {
             _isLoading = false;
+            if (!_disposed) StateHasChanged();
         }
     }
 
-    private async Task DrawBarAsync()
+    private void OnFiltersChanged()
     {
-        var data = new
-        {
-            labels = new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" },
-            values = new[] { 62, 71, 68, 79, 74, 84, 78 },
-            colors = new[] { "#E8C9A0", "#B5C4B1", "#D4B8A7", "#C4957A", "#D5C4D4", "#8FA38A", "#A87B64" }
-        };
-
-        await JS.InvokeVoidAsync("sueDrawBar", "resultsBar", data);
+        _page = 1;
+        _selectedSessionId = null;
+        _exportError = null;
+        UpdateReport();
     }
+
+    private void UpdateReport()
+    {
+        _report = ResultsAnalysisReport.Create(_allSessions, _allDetails, _statusFilter, _conditionFilter);
+        _page = Math.Min(_page, PageCount);
+        if (!_report.Sessions.Any(session => session.Id == _selectedSessionId))
+        {
+            var withReadings = _report.Details.FirstOrDefault(detail => detail.EmotionReadings.Count > 0);
+            _selectedSessionId = withReadings?.Session.Id ?? _report.Sessions.FirstOrDefault()?.Id;
+        }
+    }
+
+    private void SelectSession(Guid id) => _selectedSessionId = id;
+    private void PreviousPage() { if (_page > 1) _page--; }
+    private void NextPage() { if (_page < PageCount) _page++; }
 
     private async Task ExportReportAsync()
     {
-        var report = new
+        if (!CanExport || _report is null) return;
+        _isExporting = true;
+        _exportError = null;
+        try
         {
-            app = "SUE — Sistema de Usuario con Empatía",
-            generated = DateTime.UtcNow.ToString("o"),
-            session = _session
-        };
-
-        var json = System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions
+            var payload = new
+            {
+                app = "SUE — Sistema de Usuario con Empatía",
+                generatedAtUtc = DateTime.UtcNow,
+                dataUpdatedAtUtc = _lastUpdated?.UtcDateTime,
+                filters = new { status = _statusFilter, condition = _conditionFilter },
+                summary = new
+                {
+                    totalSessions = _report.TotalSessions, totalMessages = _report.TotalMessages,
+                    totalReadings = _report.TotalReadings, degradedReadings = _report.DegradedReadings,
+                    predominantEmotion = _report.PredominantEmotion
+                },
+                emotionCounts = _report.EmotionCounts,
+                sessions = _report.Sessions
+            };
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+            await JS.InvokeVoidAsync("sueDownloadJson", "sue-report.json", json);
+        }
+        catch (JSException)
         {
-            WriteIndented = true
-        });
+            _exportError = "No fue posible descargar el reporte. Vuelve a intentarlo.";
+        }
+        finally
+        {
+            _isExporting = false;
+            if (!_disposed) StateHasChanged();
+        }
+    }
 
-        await JS.InvokeVoidAsync("sueDownloadJson", "sue-report.json", json);
+    private static string StatusLabel(string status) => status switch
+    {
+        "Created" => "Creada", "Active" => "Activa", "Completed" => "Finalizada",
+        "TimedOut" => "Expirada", "Cancelled" => "Cancelada", _ => status
+    };
+
+    private static string ConditionLabel(string condition) => condition == "AI" ? "IA" : condition == "Human" ? "Humana" : condition;
+
+    private static string EmotionLabel(string? emotion) => emotion?.Trim().ToLowerInvariant() switch
+    {
+        "joy" => "Alegría", "neutral" => "Neutral", "sadness" => "Tristeza",
+        "confusion" => "Confusión", "anger" => "Enojo", "surprise" => "Sorpresa",
+        null or "" => "—", _ => emotion
+    };
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _disposeSource.Cancel();
+        _disposeSource.Dispose();
     }
 }

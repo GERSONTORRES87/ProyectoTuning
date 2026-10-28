@@ -1,0 +1,30 @@
+.surveys-header, .surveys-filters, .surveys-detail-header, .surveys-pagination { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.surveys-header { justify-content: space-between; align-items: flex-end; }
+.surveys-refresh { width: auto; padding: 11px 20px; }
+.surveys-filters { margin-bottom: 24px; align-items: flex-end; }
+.surveys-filter { flex: 1 1 220px; max-width: 460px; min-width: 0; }
+.surveys-filter label { display: block; margin-bottom: 8px; color: #705d50; font-size: 13px; font-weight: 800; }
+.surveys-updated, .surveys-caption { color: #796b5e; font-size: 13px; line-height: 1.7; }
+.surveys-updated { margin-left: auto; font-size: 12px; }
+.surveys-mean-row { margin-top: 24px; }
+.surveys-mean-label { display: flex; justify-content: space-between; color: #705d50; margin-bottom: 10px; }
+.surveys-mean-track { background: #e6dbcb; height: 20px; border-radius: 999px; overflow: hidden; }
+.surveys-mean-track span { display: block; height: 100%; border-radius: inherit; background: #a698bc; transition: width .2s ease; }
+.surveys-mean-row:nth-of-type(2) .surveys-mean-track span { background: #8fa38a; }
+.surveys-mean-track.is-empty { opacity: .55; }
+.surveys-empty { border: 1px dashed #c7b49f; }
+.surveys-error { border: 1px solid #d6a7a1; color: #844a43; }
+.surveys-error p { margin: 0 0 6px; }
+.surveys-table-wrap { overflow-x: auto; margin-top: 20px; }
+.surveys-table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13px; text-align: left; }
+.surveys-table th, .surveys-table td { padding: 14px 10px; border-bottom: 1px solid #dfcbbd; }
+.surveys-table th { color: #796b5e; }
+.surveys-table small { display: block; color: #796b5e; margin-top: 5px; }
+.surveys-table tbody tr.is-selected { background: #e8d7c940; }
+.surveys-table button { border: 1px solid #cdb09c; border-radius: 999px; padding: 7px 14px; background: transparent; color: #77533f; font: inherit; cursor: pointer; }
+.surveys-table button[aria-pressed="true"] { background: #9d705b; color: white; border-color: #9d705b; }
+.surveys-pagination { justify-content: flex-end; margin-top: 20px; }
+.surveys-pagination p { margin: 0 auto 0 0; font-size: 13px; color: #796b5e; }
+.surveys-pagination .btn-ghost { width: auto; padding: 8px 16px; }
+.surveys-detail-header { justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #dfcbbd; margin-bottom: 24px; padding-bottom: 20px; }
+@media (max-width: 640px) { .surveys-filter { max-width: none; } .surveys-updated { width: 100%; margin-left: 0; } .surveys-pagination p { width: 100%; } }

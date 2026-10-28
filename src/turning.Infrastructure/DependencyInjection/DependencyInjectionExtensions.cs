@@ -48,6 +48,7 @@ public static class DependencyInjectionExtensions
         services.AddScoped<Turning.Application.Features.Emotions.IEmotionService, Services.EmotionService>();
         services.AddScoped<Turning.Application.Features.Emotions.IAvatarService, Services.AvatarService>();
         services.AddScoped<Turning.Application.Features.Surveys.ISurveyService, Services.SurveyAppService>();
+        services.AddScoped<Turning.Application.Features.Surveys.IAdminSurveyResultsService, Services.AdminSurveyResultsService>();
         services.AddScoped<Turning.Application.Features.Events.IEventService, Services.EventService>();
         services.AddScoped<Turning.Application.Features.Events.IResultsService, Services.ResultsService>();
         services.AddScoped<IUserAccountRepository, UserAccountRepository>();

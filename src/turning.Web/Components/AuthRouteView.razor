@@ -1,0 +1,32 @@
+<AuthorizeRouteView RouteData="RouteData" DefaultLayout="DefaultLayout">
+    <NotAuthorized Context="authenticationState">
+        @if (authenticationState.User.Identity?.IsAuthenticated == true)
+        {
+            <section class="route-guard" role="alert">
+                <p class="eyebrow">Acceso restringido</p>
+                <h1>No tienes permiso para entrar a esta sección.</h1>
+                <p class="hero-copy">Tu sesión está activa. Puedes continuar desde tu espacio personal.</p>
+                <a class="btn-tierra" href="/workspace">Ir a mi espacio</a>
+            </section>
+        }
+        else
+        {
+            <RedirectToLogin />
+        }
+    </NotAuthorized>
+    <Authorizing>
+        <section class="route-guard">
+            <p class="eyebrow">Sesión</p>
+            <h1>Validando acceso protegido.</h1>
+            <p class="hero-copy">Esperando el token persistido en el navegador para reconstruir la sesión.</p>
+        </section>
+    </Authorizing>
+</AuthorizeRouteView>
+
+@code {
+    [Parameter, EditorRequired]
+    public RouteData RouteData { get; set; } = default!;
+
+    [Parameter]
+    public Type? DefaultLayout { get; set; }
+}

@@ -76,6 +76,31 @@ public sealed class ExperimentSessionApiClient
         return await ReadResponseAsync<SessionListDto>(response, cancellationToken);
     }
 
+    public async Task<SessionListDto> ListAllSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        const int pageSize = 100;
+        var items = new List<ExperimentSessionSnapshotDto>();
+        var total = 0;
+
+        for (var page = 1; ; page++)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/results?page={page}&pageSize={pageSize}");
+            AttachAccessToken(request);
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            var result = await ReadResponseAsync<SessionListDto>(response, cancellationToken);
+            total = result.Total;
+            items.AddRange(result.Items);
+
+            if (result.Items.Count == 0 || items.Count >= total)
+            {
+                break;
+            }
+        }
+
+        return new SessionListDto { Items = items.DistinctBy(session => session.Id).ToList(), Total = total };
+    }
+
     public async Task<SessionListDto> ListAwaitingInterlocutorAsync(CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "api/sessions/awaiting-interlocutor");

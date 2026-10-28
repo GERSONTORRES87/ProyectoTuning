@@ -4,7 +4,6 @@
 @using turning.Web.ExperimentSessions
 
 @inject ExperimentSessionApiClient ExperimentSessionApiClient
-@inject IJSRuntime JS
 
 <PageTitle>SUE — Lectura de Emociones</PageTitle>
 
@@ -31,14 +30,12 @@
         }
     </div>
 
-    <!-- Radar + Formulario -->
+    <!-- Balance de intensidad + Formulario -->
     <div class="sue-two-cols">
-        <!-- Radar -->
+        <!-- Barras de intensidad -->
         <div class="sue-card">
             <h2 class="sue-card-title">Balance emocional</h2>
-            <div style="margin-top: 20px; height: 320px;">
-                <canvas id="emotionRadar"></canvas>
-            </div>
+            <EmotionIntensityChart Levels="EmotionLevels" Colors="EmotionColors" />
         </div>
 
         <!-- Registrar emoción -->
@@ -111,13 +108,9 @@
     private string _emotionNote = string.Empty;
     private string? _confirmationMessage;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await DrawRadarAsync();
-        }
-    }
+    private IReadOnlyDictionary<string, int> EmotionLevels => _emotions.ToDictionary(emotion => emotion.Name, emotion => emotion.Level);
+
+    private IReadOnlyDictionary<string, string> EmotionColors => _emotions.ToDictionary(emotion => emotion.Name, emotion => emotion.Color);
 
     private void SelectEmotion(EmotionItem emotion)
     {
@@ -148,15 +141,4 @@
         }
     }
 
-    private async Task DrawRadarAsync()
-    {
-        var data = new
-        {
-            labels = _emotions.Select(x => x.Name).ToArray(),
-            values = _emotions.Select(x => x.Level / 100.0).ToArray(),
-            colors = _emotions.Select(x => x.Color).ToArray()
-        };
-
-        await JS.InvokeVoidAsync("sueDrawRadar", "emotionRadar", data);
-    }
 }
