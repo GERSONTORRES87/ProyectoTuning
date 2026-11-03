@@ -10,10 +10,9 @@ namespace Turning.API.Controllers;
 /// Ciclo de vida de las sesiones experimentales: creación, activación,
 /// finalización, cancelación y consulta.
 ///
-/// Todas las rutas aplican aislamiento por propietario. Un solicitante que no es
-/// dueño de la sesión ni tiene rol privilegiado (Researcher / Administrator)
-/// recibe <c>404 SESSION_NOT_FOUND</c>, el mismo que si la sesión no existiera:
-/// así no se puede confirmar la existencia de identificadores ajenos probando GUIDs.
+/// El propietario activa y completa; el interlocutor asignado puede consultar.
+/// Researcher y Administrator pueden observar, y Administrator puede cancelar.
+/// Los terceros sin acceso reciben <c>404 SESSION_NOT_FOUND</c>.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -46,7 +45,7 @@ public sealed class SessionsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateExperimentSessionRequest? req, CancellationToken ct)
     {
         var uid = GetUserId(); if (uid == Guid.Empty) return Unauthorized();
-        try { var r = await _svc.CreateBootstrapSessionAsync(uid, req, ct); return CreatedAtAction(nameof(GetById), new { id = r.Id }, r); }
+        try { var r = await _svc.CreateBootstrapSessionAsync(uid, req, ct, IsPrivileged()); return CreatedAtAction(nameof(GetById), new { id = r.Id }, r); }
         catch (AppEx ex) { return StatusCode(Map(ex.Code ?? "SESSION_ERROR"), new { error = ex.Code, message = ex.Message }); }
     }
 
@@ -56,7 +55,7 @@ public sealed class SessionsController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Desde ese momento <c>expiresAtUtc</c> indica cuándo se completará por
-    /// temporizador. Solo el dueño, o un solicitante privilegiado, puede activarla.
+    /// temporizador. Solo el dueño puede activarla.
     /// </remarks>
     /// <response code="200">Sesión activada.</response>
     /// <response code="404">La sesión no existe, o existe y es ajena: <c>SESSION_NOT_FOUND</c> en ambos casos.</response>

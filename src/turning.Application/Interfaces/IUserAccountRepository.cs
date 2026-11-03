@@ -23,6 +23,11 @@ public interface IUserAccountRepository
     Task<bool> ExistsByEmailAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Busca cuentas no eliminadas cuyo nombre o correo contiene el texto, ordenadas por correo.
+    /// </summary>
+    Task<(IReadOnlyList<UserAccount> Items, int Total)> SearchAsync(string? query, int page, int pageSize, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Persiste un nuevo usuario.
     /// </summary>
     Task AddAsync(UserAccount userAccount, CancellationToken cancellationToken = default);

@@ -55,7 +55,7 @@
                         Contraseña
                     </label>
                     <InputText class="input-tierra" @bind-Value="_model.Password" 
-                               type="password" placeholder="Al menos 6 caracteres" 
+                               type="password" placeholder="Al menos 8 caracteres"
                                autocomplete="new-password" />
                     <ValidationMessage For="@(() => _model.Password)" 
                                        style="color: #A87B64; font-size: 13px; margin-top: 4px; display: block;" />
@@ -179,7 +179,7 @@
         public string Email { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "La contraseña es obligatoria.")]
-        [MinLength(6, ErrorMessage = "La contraseña debe tener al menos 6 caracteres.")]
+        [MinLength(8, ErrorMessage = "La contraseña debe tener al menos 8 caracteres.")]
         public string Password { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "Debes confirmar la contraseña.")]

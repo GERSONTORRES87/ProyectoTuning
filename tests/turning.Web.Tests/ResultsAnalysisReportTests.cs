@@ -67,6 +67,23 @@ public sealed class ResultsAnalysisReportTests
     }
 
     [Fact]
+    public void UnassignedConditionsAreExcludedFromAConditionFilter()
+    {
+        var unassigned = new ExperimentSessionSnapshotDto
+        {
+            Id = Guid.NewGuid(),
+            Status = "Created",
+            Condition = null
+        };
+        var assigned = Session(1, "Active", "AI", messages: 1);
+
+        var report = ResultsAnalysisReport.Create([unassigned, assigned], [], condition: "AI");
+
+        report.Sessions.Should().ContainSingle().Which.Id.Should().Be(assigned.Id);
+        ResultsAnalysisReport.Create([unassigned, assigned], []).TotalSessions.Should().Be(2);
+    }
+
+    [Fact]
     public void EmotionNamesAreTrimmedAndGroupedWithoutCaseSensitiveDuplicates()
     {
         var first = Session(1, "Active", "AI", messages: 1);

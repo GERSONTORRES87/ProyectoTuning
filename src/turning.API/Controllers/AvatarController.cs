@@ -12,7 +12,7 @@ public sealed class AvatarController : ControllerBase
     [HttpGet("current")]
     public async Task<IActionResult> Current(Guid sessionId, CancellationToken ct)
     {
-        var cur = await _svc.GetCurrentAsync(sessionId, ct);
-        return Ok(cur);
+        try { return Ok(await _svc.GetCurrentAsync(sessionId, ct)); }
+        catch (InvalidOperationException ex) when (ex.Message=="SESSION_NOT_FOUND") { return NotFound(new { error=ex.Message }); }
     }
 }

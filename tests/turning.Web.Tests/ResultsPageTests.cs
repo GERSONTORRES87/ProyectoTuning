@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,7 +53,7 @@ public sealed class ResultsPageTests
         await render.Should().NotThrowAsync();
 
         result!.Html.Should().Contain("role=\"alert\"");
-        WebUtility.HtmlDecode(result.Html).Should().Contain("No fue posible conectar");
+        WebUtility.HtmlDecode(result.Html).Should().Contain("conectar con la API");
     }
 
     [Fact]
@@ -88,15 +90,50 @@ public sealed class ResultsPageTests
         result.DownloadJson.Should().NotContain("\"conversation\"").And.NotContain("accessToken").And.NotContain("password");
     }
 
-    private static async Task<RenderedResult> RenderAsync(ResultsHandler handler, bool export = false)
+    [Fact]
+    public async Task ParticipantSeesOnlyTheSelectedCompletedSessionAndExportsWithoutResearchMetadata()
+    {
+        var handler = ResultsHandler.WithTwoSessions();
+        var completed = handler.Sessions[1];
+
+        var result = await RenderAsync(handler, role: "Participant", selectedSession: completed, export: true);
+
+        WebUtility.HtmlDecode(result.Html).Should().Contain("EXP-SECOND").And.Contain("Conversación registrada");
+        WebUtility.HtmlDecode(result.Html).Should().NotContain("Sesiones totales").And.NotContain("Condición experimental");
+        handler.RequestedPaths.Should().NotContain("/api/results");
+        handler.RequestedPaths.Should().Contain($"/api/sessions/{completed.Id}/results");
+        using var document = JsonDocument.Parse(result.DownloadJson!);
+        document.RootElement.GetProperty("SessionCode").GetString().Should().Be("EXP-SECOND");
+        document.RootElement.TryGetProperty("Condition", out _).Should().BeFalse();
+        document.RootElement.TryGetProperty("DegradedEvents", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ParticipantActiveSessionWaitsForCompletionWithoutRequestingResults()
+    {
+        var handler = ResultsHandler.WithTwoSessions();
+
+        var result = await RenderAsync(handler, role: "Participant", selectedSession: handler.Sessions[0]);
+
+        WebUtility.HtmlDecode(result.Html).Should().Contain("cuando termine la sesión");
+        handler.RequestedPaths.Should().NotContain("/api/results")
+            .And.NotContain($"/api/sessions/{handler.Sessions[0].Id}/results");
+    }
+
+    private static async Task<RenderedResult> RenderAsync(ResultsHandler handler, bool export = false, string role = "Administrator", ExperimentSessionSnapshotDto? selectedSession = null)
     {
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://local.test/") };
         var authSession = new AuthSession();
-        var pageReference = new PageReference();
+        var pageReference = new PageReference
+        {
+            State = Task.FromResult(new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"))))
+        };
         var js = new DownloadJsRuntime();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddAuthorizationCore();
         services.AddSingleton(new ExperimentSessionApiClient(client, authSession));
+        services.AddSingleton(new AuthApiClient(client, authSession));
         services.AddSingleton<NavigationManager>(new TestNavigationManager());
         services.AddSingleton(new TokenAuthenticationStateProvider(new BrowserTokenStore(js), authSession));
         services.AddSingleton<IJSRuntime>(js);
@@ -107,9 +144,15 @@ public sealed class ResultsPageTests
         return await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var rendered = await renderer.RenderComponentAsync<ResultsHost>();
+            if (selectedSession is not null)
+            {
+                var loadHandler = typeof(Results).GetMethod("LoadSessionAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                await (Task)loadHandler.Invoke(pageReference.Page, [selectedSession])!;
+                typeof(ComponentBase).GetMethod("StateHasChanged", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pageReference.Page, null);
+            }
             if (export)
             {
-                var exportHandler = typeof(Results).GetMethod("ExportReportAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var exportHandler = typeof(Results).GetMethod(role == "Participant" ? "ExportSessionAsync" : "ExportReportAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 await (Task)exportHandler.Invoke(pageReference.Page, null)!;
             }
             return new RenderedResult(rendered.ToHtmlString(), js.DownloadJson);
@@ -121,6 +164,7 @@ public sealed class ResultsPageTests
     private sealed class PageReference
     {
         public Results? Page { get; set; }
+        public Task<AuthenticationState> State { get; init; } = default!;
     }
 
     private sealed class ResultsHost : ComponentBase
@@ -130,8 +174,14 @@ public sealed class ResultsPageTests
 
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
-            builder.OpenComponent<Results>(0);
-            builder.AddComponentReferenceCapture(1, component => Reference.Page = (Results)component);
+            builder.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
+            builder.AddAttribute(1, "Value", Reference.State);
+            builder.AddAttribute(2, "ChildContent", (RenderFragment)(child =>
+            {
+                child.OpenComponent<Results>(0);
+                child.AddComponentReferenceCapture(1, component => Reference.Page = (Results)component);
+                child.CloseComponent();
+            }));
             builder.CloseComponent();
         }
     }
@@ -158,10 +208,12 @@ public sealed class ResultsPageTests
             var path = request.RequestUri!.AbsolutePath;
             RequestedPaths.Add(path);
             if (failConnection) throw new HttpRequestException("offline");
+            if (path == "/api/auth/me")
+                return Task.FromResult(JsonResponse(new AuthenticatedUserDto { Id = Guid.NewGuid(), FullName = "Test", Email = "test@example.test", Role = "Participant" }));
+            if (path.StartsWith("/api/sessions/participant/", StringComparison.Ordinal))
+                return Task.FromResult(JsonResponse(new ParticipantSessionsDto()));
             if (path == "/api/experiment-sessions/latest")
-                return Task.FromResult(Sessions.Count == 0
-                    ? new HttpResponseMessage(HttpStatusCode.NotFound)
-                    : JsonResponse(Sessions[0]));
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
             if (path == "/api/results")
                 return Task.FromResult(JsonResponse(new SessionListDto { Items = Sessions, Total = Sessions.Count }));
 
@@ -179,6 +231,7 @@ public sealed class ResultsPageTests
         private static ExperimentSessionSnapshotDto Session(string code, string status, int messages, int emotions) => new()
         {
             Id = Guid.NewGuid(), SessionCode = code, Condition = "AI", Status = status,
+            ParticipationRole = "Owner",
             AvatarState = "neutral", ConversationStage = "available", EmotionStage = "available", AvatarStage = "available",
             ConversationTurnCount = messages, EmotionSampleCount = emotions,
             CreatedAtUtc = new DateTime(2026, 10, 27, 16, 0, 0, DateTimeKind.Utc)

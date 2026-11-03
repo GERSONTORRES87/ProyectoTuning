@@ -55,6 +55,6 @@ public sealed class ResultsAnalysisReport
         };
     }
 
-    private static bool Matches(string value, string? filter) =>
-        string.IsNullOrWhiteSpace(filter) || string.Equals(value.Trim(), filter.Trim(), StringComparison.OrdinalIgnoreCase);
+    private static bool Matches(string? value, string? filter) =>
+        string.IsNullOrWhiteSpace(filter) || string.Equals(value?.Trim(), filter.Trim(), StringComparison.OrdinalIgnoreCase);
 }

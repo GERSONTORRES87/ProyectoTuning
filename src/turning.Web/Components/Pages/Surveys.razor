@@ -6,10 +6,13 @@
 @using System.Net
 @using System.Text.Json
 @using turning.Web.Surveys
+@using SessionSnapshotDto = turning.Web.ExperimentSessions.ExperimentSessionSnapshotDto
+@using SessionSurveyDefinitionDto = turning.Web.ExperimentSessions.SurveyDefinitionDto
 
 @implements IDisposable
 @inject AuthApiClient AuthApiClient
 @inject SurveyApiClient SurveyApiClient
+@inject turning.Web.ExperimentSessions.ExperimentSessionApiClient Sessions
 @inject NavigationManager NavigationManager
 @inject TokenAuthenticationStateProvider AuthStateProvider
 
@@ -149,7 +152,60 @@
     }
     else if (_loaded && !_isAdmin)
     {
-        <div class="sue-card"><p class="sue-info-value">Próximamente: encuestas interactivas con resultados.</p></div>
+        <p class="surveys-caption">Responde al terminar. El envío es definitivo y se guarda con esta sesión.</p>
+        <SessionSelector SessionId="SessionId" OnSelected="LoadParticipantAsync" />
+        @if (_participantError is not null)
+        {
+            <div class="sue-card surveys-error" role="alert">@_participantError</div>
+        }
+        @if (_session is not null && !_session.IsTerminal)
+        {
+            <div class="sue-card"><p>La encuesta estará disponible cuando la sesión termine.</p><a href="/conversations?sessionId=@_session.Id">Volver a la sesión</a></div>
+        }
+        else if (_session is not null && !_session.IsOwner)
+        {
+            <div class="sue-card"><p>La encuesta la responde el participante dueño de la sesión. El equipo puede consultar sus respuestas en Resultados.</p></div>
+        }
+        else if (_participantLoading)
+        {
+            <div class="sue-card" role="status">Cargando encuesta...</div>
+        }
+        else if (_submitted)
+        {
+            <div class="sue-card" role="status"><h2 class="sue-card-title">Encuesta enviada</h2><p>Tus respuestas quedaron guardadas.</p><a class="btn-ghost" href="/results?sessionId=@_session!.Id">Consultar resultado</a></div>
+        }
+        else if (_definition is not null)
+        {
+            <div class="sue-card">
+                <p class="sue-subtitle">Encuesta @_definition.Code · versión @_definition.Version</p>
+                <form @onsubmit="SubmitParticipantAsync" @onsubmit:preventDefault>
+                    @foreach (var question in _definition.Questions.OrderBy(question => question.Order))
+                    {
+                        <div class="sue-form-field">
+                            <label class="sue-form-label" for="q-@question.Id">@question.Text @(question.Required ? "(obligatoria)" : "(opcional)")</label>
+                            @if (IsScale(question.Type))
+                            {
+                                <select id="q-@question.Id" class="input-tierra" @bind="_answers[question.Code]" required="@question.Required" disabled="@_busy">
+                                    <option value="">Selecciona 1 a 5</option>
+                                    @for (var value = 1; value <= 5; value++) { <option value="@value">@value</option> }
+                                </select>
+                            }
+                            else if (string.Equals(question.Type?.Trim(), "choice", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <select id="q-@question.Id" class="input-tierra" @bind="_answers[question.Code]" required="@question.Required" disabled="@_busy">
+                                    <option value="">Selecciona una respuesta</option><option value="Human">Una persona</option><option value="AI">Inteligencia artificial</option><option value="Unsure">No estoy seguro/a</option>
+                                </select>
+                            }
+                            else
+                            {
+                                <textarea id="q-@question.Id" class="input-tierra" rows="3" maxlength="4000" @bind="_answers[question.Code]" required="@question.Required" disabled="@_busy"></textarea>
+                            }
+                        </div>
+                    }
+                    <button class="btn-tierra" type="submit" disabled="@_busy">@(_busy ? "Guardando…" : "Enviar respuestas definitivas")</button>
+                </form>
+            </div>
+        }
     }
 </div>
 
@@ -172,6 +228,14 @@
     private bool _disposed;
     private int _page = 1;
     private Timer? _timer;
+    private SessionSnapshotDto? _session;
+    private SessionSurveyDefinitionDto? _definition;
+    private Dictionary<string, string> _answers = [];
+    private bool _busy;
+    private bool _submitted;
+    private bool _participantLoading;
+    private string? _participantError;
+    private int _participantLoadVersion;
 
     private IEnumerable<SurveyParticipantDto> Agents => (_allResults ?? []).Select(result => result.Participant).DistinctBy(agent => agent.Id).OrderBy(agent => agent.FullName);
     private int PageCount => Math.Max(1, (_visibleResults.Count + PageSize - 1) / PageSize);
@@ -257,6 +321,94 @@
         _selectedResponseId = null;
         UpdateSelection();
     }
+
+    private async Task LoadParticipantAsync(SessionSnapshotDto? session)
+    {
+        var loadVersion = ++_participantLoadVersion;
+        var cancellationToken = _disposeSource.Token;
+        _session = session;
+        _definition = null;
+        _answers = [];
+        _participantError = null;
+        _submitted = false;
+        _participantLoading = false;
+        if (session is null || !session.IsTerminal || !session.IsOwner) return;
+
+        _participantLoading = true;
+        try
+        {
+            var result = await Sessions.GetResultAsync(session.Id, cancellationToken);
+            if (_disposed || loadVersion != _participantLoadVersion) return;
+            _submitted = result.Survey.Any(response => response.SubmittedAtUtc.HasValue);
+            if (_submitted) return;
+            var definition = await Sessions.GetSurveyAsync(session.Id, cancellationToken);
+            if (_disposed || loadVersion != _participantLoadVersion) return;
+            _definition = definition;
+            _answers = definition.Questions.ToDictionary(question => question.Code, _ => string.Empty);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            if (!_disposed) await RedirectToLoginAsync();
+        }
+        catch (Exception exception) when (exception is ApiException or HttpRequestException or JsonException or OperationCanceledException)
+        {
+            if (!_disposed && loadVersion == _participantLoadVersion) _participantError = ParticipantError(exception);
+        }
+        finally
+        {
+            if (!_disposed && loadVersion == _participantLoadVersion) _participantLoading = false;
+        }
+    }
+
+    private async Task SubmitParticipantAsync()
+    {
+        if (_busy || _disposed || _submitted || _session is not { IsTerminal: true, IsOwner: true } session || _definition is null) return;
+        if (_definition.Questions.Any(question => question.Required && string.IsNullOrWhiteSpace(_answers.GetValueOrDefault(question.Code))))
+        {
+            _participantError = "Responde todas las preguntas obligatorias.";
+            return;
+        }
+
+        var loadVersion = _participantLoadVersion;
+        var cancellationToken = _disposeSource.Token;
+        var request = new turning.Web.ExperimentSessions.SurveySubmitRequestDto(_definition.Id, new(_answers));
+        _busy = true;
+        _participantError = null;
+        try
+        {
+            await Sessions.SubmitSurveyAsync(session.Id, request, cancellationToken);
+            if (!_disposed && loadVersion == _participantLoadVersion) _submitted = true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            if (!_disposed) await RedirectToLoginAsync();
+        }
+        catch (Exception exception) when (exception is ApiException or HttpRequestException or JsonException or OperationCanceledException)
+        {
+            if (!_disposed && loadVersion == _participantLoadVersion) _participantError = ParticipantError(exception);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RedirectToLoginAsync()
+    {
+        await AuthStateProvider.SignOutAsync();
+        var returnUrl = SessionId.HasValue ? $"/surveys?sessionId={SessionId.Value}" : "/surveys";
+        NavigationManager.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", replace: true);
+    }
+
+    private static bool IsScale(string? type) => string.Equals(type?.Trim(), "scale", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(type?.Trim(), "likert-1-5", StringComparison.OrdinalIgnoreCase);
+
+    private static string ParticipantError(Exception exception) => exception switch
+    {
+        ApiException apiException => apiException.Message,
+        HttpRequestException => "No fue posible conectar con el servicio de encuestas. Intenta de nuevo.",
+        JsonException => "No fue posible leer la encuesta de la sesión.",
+        _ => "El servicio tardó demasiado en responder. Intenta de nuevo."
+    };
 
     private void UpdateSelection()
     {

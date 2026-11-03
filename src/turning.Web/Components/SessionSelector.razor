@@ -1,0 +1,109 @@
+@using System.Net
+@using turning.Web.ExperimentSessions
+@inject ExperimentSessionApiClient Sessions
+@inject AuthApiClient Auth
+@inject TokenAuthenticationStateProvider AuthState
+@inject NavigationManager Navigation
+
+<div class="sue-card">
+    @if (_error is not null)
+    {
+        <p role="alert">@_error</p>
+        <button class="btn-ghost" @onclick="LoadAsync">Reintentar</button>
+    }
+    else if (_loading)
+    {
+        <p role="status">Cargando sesión...</p>
+    }
+    else if (_selected is null)
+    {
+        <p>Aún no tienes una sesión. Crea una o únete con un código.</p>
+        <a class="btn-ghost" href="/sessions">Ir a sesiones</a>
+    }
+    else
+    {
+        <label class="sue-form-label" for="selected-session">Sesión seleccionada</label>
+        <select id="selected-session" class="input-tierra" value="@_selected.Id" @onchange="ChangeSession">
+            @foreach (var session in _sessions)
+            {
+                <option value="@session.Id">@session.SessionCode</option>
+            }
+        </select>
+        <p class="sue-subtitle" style="margin-top:12px">Tu participación: @RoleLabel(_selected.ParticipationRole)</p>
+        <nav aria-label="Secciones de la sesión" style="display:flex;flex-wrap:wrap;gap:16px;margin-top:16px">
+            <a href="/conversations?sessionId=@_selected.Id">Conversación</a>
+            @if (_selected.IsOwner || !_selected.CanConverse)
+            {
+                <a href="/emotions?sessionId=@_selected.Id">Emociones</a>
+                <a href="/avatar?sessionId=@_selected.Id">Avatar</a>
+                @if (_selected.IsTerminal)
+                {
+                    <a href="/surveys?sessionId=@_selected.Id">Encuesta</a>
+                }
+                <a href="/results?sessionId=@_selected.Id">Resultados</a>
+            }
+        </nav>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid? SessionId { get; set; }
+    [Parameter] public EventCallback<ExperimentSessionSnapshotDto?> OnSelected { get; set; }
+    private List<ExperimentSessionSnapshotDto> _sessions = [];
+    private ExperimentSessionSnapshotDto? _selected;
+    private Guid? _loadedId;
+    private bool _initialized;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized || SessionId != _loadedId) await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _loadedId = SessionId;
+        _initialized = true;
+        try
+        {
+            var user = await Auth.GetCurrentUserAsync();
+            var own = await Sessions.ListOwnAsync(user.Id);
+            _sessions = own.Sessions;
+            _selected = SessionId.HasValue ? await Sessions.GetByIdAsync(SessionId.Value) : await Sessions.GetLatestAsync();
+            if (_selected is not null && !_sessions.Any(s => s.Id == _selected.Id)) _sessions.Add(_selected);
+            if (_selected is not null && !SessionId.HasValue)
+            {
+                Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("sessionId", _selected.Id), replace: true);
+                return;
+            }
+            await OnSelected.InvokeAsync(_selected);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+            await OnSelected.InvokeAsync(null);
+            if (ex.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                await AuthState.SignOutAsync();
+                Navigation.NavigateTo("/login", replace: true);
+            }
+        }
+        finally { _loading = false; }
+    }
+
+    private void ChangeSession(ChangeEventArgs args)
+    {
+        if (Guid.TryParse(args.Value?.ToString(), out var id))
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("sessionId", id));
+    }
+
+    private static string RoleLabel(string? role) => role switch
+    {
+        "Owner" => "Participante",
+        "Interlocutor" => "Interlocutor",
+        _ => "Observador"
+    };
+}

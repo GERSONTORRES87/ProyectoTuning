@@ -74,5 +74,11 @@ public sealed class ExperimentSessionRepository : IExperimentSessionRepository
             && s.Status != ExperimentSessionStatus.TimedOut
             && s.Status != ExperimentSessionStatus.Cancelled);
 
+    public Task ReloadAsync(ExperimentSession session, CancellationToken ct = default)
+        => _dbContext.Entry(session).ReloadAsync(ct);
+
+    public async Task AddAuditAsync(SessionAuditEntry entry, CancellationToken ct = default)
+        => await _dbContext.SessionAuditEntries.AddAsync(entry, ct);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken = default) => _dbContext.SaveChangesAsync(cancellationToken);
 }

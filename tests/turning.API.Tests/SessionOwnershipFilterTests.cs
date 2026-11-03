@@ -31,6 +31,9 @@ public class SessionOwnershipFilterTests
 {
     private readonly IExperimentSessionService _sessions = Substitute.For<IExperimentSessionService>();
 
+    // DefaultHttpContext arranca con el verbo vacio, que el filtro trataria como una escritura.
+    private string _method = "GET";
+
     private static readonly Guid SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid UserId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
@@ -50,6 +53,7 @@ public class SessionOwnershipFilterTests
             RequestServices = services.BuildServiceProvider(),
             User = user ?? new ClaimsPrincipal(new ClaimsIdentity())
         };
+        httpContext.Request.Method = _method;
 
         var routeData = new RouteData();
         if (routeSessionId is not null)
@@ -177,6 +181,78 @@ public class SessionOwnershipFilterTests
         context.Result.Should().BeNull();
         await _sessions.Received(1).GetAccessLevelAsync(
             SessionId, UserId, true, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("POST")]
+    [InlineData("PUT")]
+    [InlineData("PATCH")]
+    [InlineData("DELETE")]
+    public async Task ShouldKeepPrivilegedObserversFromWriting_OnRoutesWithoutTheOptIn(string method)
+    {
+        _method = method;
+        ArrangeLevel(SessionAccessLevel.Privileged, isPrivileged: true);
+        var context = CreateContext(SessionId.ToString(), Authenticated(UserId, "Researcher"));
+
+        await new SessionOwnershipFilter().OnAuthorizationAsync(context);
+
+        // Sin esto, un investigador ajeno podia enviar la encuesta o las emociones del dueno.
+        ShouldBeNotFoundWithSessionCode(context.Result);
+    }
+
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("HEAD")]
+    public async Task ShouldLetPrivilegedObserversRead(string method)
+    {
+        _method = method;
+        ArrangeLevel(SessionAccessLevel.Privileged, isPrivileged: true);
+        var context = CreateContext(SessionId.ToString(), Authenticated(UserId, "Administrator"));
+
+        await new SessionOwnershipFilter().OnAuthorizationAsync(context);
+
+        context.Result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("Researcher")]
+    [InlineData("Administrator")]
+    public async Task ShouldLetPrivilegedRolesWrite_WhereTheRouteOptsIn(string role)
+    {
+        _method = "POST";
+        ArrangeLevel(SessionAccessLevel.Privileged, isPrivileged: true);
+        var context = CreateContext(
+            SessionId.ToString(), Authenticated(UserId, role), new AllowPrivilegedSessionWriteAttribute());
+
+        await new SessionOwnershipFilter().OnAuthorizationAsync(context);
+
+        context.Result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ShouldStillLetAPrivilegedOwnerWrite_WithoutTheOptIn()
+    {
+        // El dueno que ademas es investigador resuelve como Owner, no como Privileged.
+        _method = "POST";
+        ArrangeLevel(SessionAccessLevel.Owner, isPrivileged: true);
+        var context = CreateContext(SessionId.ToString(), Authenticated(UserId, "Researcher"));
+
+        await new SessionOwnershipFilter().OnAuthorizationAsync(context);
+
+        context.Result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ShouldLetTheAssignedInterlocutorWrite_OnRoutesWithTheInterlocutorOptIn()
+    {
+        _method = "POST";
+        ArrangeLevel(SessionAccessLevel.Interlocutor);
+        var context = CreateContext(
+            SessionId.ToString(), Authenticated(UserId), new AllowSessionInterlocutorAttribute());
+
+        await new SessionOwnershipFilter().OnAuthorizationAsync(context);
+
+        context.Result.Should().BeNull();
     }
 
     [Fact]

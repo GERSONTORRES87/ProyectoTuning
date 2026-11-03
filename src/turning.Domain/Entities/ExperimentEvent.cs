@@ -8,5 +8,13 @@ public sealed class ExperimentEvent : BaseEntity
     public string PayloadJson { get; private set; } = "{}";
     public DateTime OccurredAtUtc { get; private set; }
     public DateTime ExpiresAtUtc { get; private set; }
-    public static ExperimentEvent Create(Guid sid, string type, string payload) => new(){ Id=Guid.NewGuid(), SessionId=sid, Type=type, PayloadJson=payload, OccurredAtUtc=DateTime.UtcNow, ExpiresAtUtc=DateTime.UtcNow.AddDays(30), CreatedAt=DateTime.UtcNow };
+    public static ExperimentEvent Create(Guid sid, string type, string payload, DateTime? occurredAtUtc = null)
+    {
+        var now = occurredAtUtc ?? DateTime.UtcNow;
+        return new ExperimentEvent
+        {
+            Id = Guid.CreateVersion7(), SessionId = sid, Type = type, PayloadJson = payload,
+            OccurredAtUtc = now, ExpiresAtUtc = now.AddDays(30), CreatedAt = now
+        };
+    }
 }

@@ -1,267 +1,44 @@
 @page "/workspace"
 @attribute [Authorize]
-
-@using System.Net
-@using System.Security.Claims
+@inject AuthApiClient Auth
+@inject ExperimentSessionApiClient Sessions
+@inject NavigationManager Navigation
 @using turning.Web.ExperimentSessions
 
-@inject AuthApiClient AuthApiClient
-@inject ExperimentSessionApiClient ExperimentSessionApiClient
-@inject NavigationManager NavigationManager
-@inject TokenAuthenticationStateProvider AuthStateProvider
-
 <PageTitle>SUE — Panel</PageTitle>
-
 <div class="sue-page">
-    @if (_isLoading)
+    <header class="sue-header"><p class="sue-eyebrow">Tu espacio</p><h1 class="sue-title">Bienvenido a SUE</h1><p class="sue-subtitle">Prepara tu sesión y continúa el experimento.</p></header>
+    @if (_error is not null) { <div class="sue-card" role="alert"><p>@_error</p><button class="btn-ghost" @onclick="LoadAsync">Reintentar</button></div> }
+    @if (_user is not null)
     {
-        <div class="sue-loading">
-            <p class="sue-eyebrow">Perfil</p>
-            <h1 class="sue-title">Cargando tu espacio...</h1>
-            <p class="sue-subtitle">Consultando tu perfil y sesiones recientes.</p>
-        </div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_errorMessage))
-    {
-        <div class="sue-loading">
-            <p class="sue-eyebrow">Error</p>
-            <h1 class="sue-title">No fue posible cargar el panel.</h1>
-            <p class="sue-subtitle">@_errorMessage</p>
-            <button class="btn-tierra" style="max-width: 240px; margin-top: 20px;" @onclick="LoadWorkspaceAsync">
-                Reintentar
-            </button>
-        </div>
-    }
-    else if (_user is not null)
-    {
-        <!-- Header bienvenida -->
-        <header class="sue-header">
-            <p class="sue-eyebrow">◦ Tu jardín emocional</p>
-            <h1 class="sue-title">Hola, @GetFirstName()</h1>
-            <p class="sue-subtitle">Hoy es un buen día para conectar contigo mismo.</p>
-        </header>
-
-        <!-- Grid principal -->
-        <div class="sue-grid-main">
-            <!-- Stats -->
-            <div class="sue-stats-grid">
-                <div class="sue-stat-card">
-                    <div class="sue-stat-icon">◦</div>
-                    <p class="sue-stat-value">@(_session is not null ? "1" : "0")</p>
-                    <p class="sue-stat-label">Sesión activa</p>
-                </div>
-                <div class="sue-stat-card">
-                    <div class="sue-stat-icon">·</div>
-                    <p class="sue-stat-value">@_conversationTurns.Count</p>
-                    <p class="sue-stat-label">Mensajes</p>
-                </div>
-                <div class="sue-stat-card">
-                    <div class="sue-stat-icon">◇</div>
-                    <p class="sue-stat-value">@(_session?.EmotionSampleCount ?? 0)</p>
-                    <p class="sue-stat-label">Emociones</p>
-                </div>
-                <div class="sue-stat-card">
-                    <div class="sue-stat-icon">○</div>
-                    <p class="sue-stat-value">@(_session?.ConversationTurnCount ?? 0)</p>
-                    <p class="sue-stat-label">Turnos</p>
-                </div>
-            </div>
-
-            <!-- Card de frase SUE -->
-            <div class="sue-quote-card">
-                <p class="sue-quote-label">SUE dice</p>
-                <p class="sue-quote-text">Cada emoción tiene su lugar en tu jardín interior.</p>
-                <span class="sue-quote-icon">◦</span>
-            </div>
-        </div>
-
-        <!-- Perfil -->
         <div class="sue-card">
-            <h2 class="sue-card-title">Tu perfil</h2>
-            <div class="sue-info-grid">
-                <div>
-                    <p class="sue-info-label">Nombre</p>
-                    <p class="sue-info-value">@_user.FullName</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Correo</p>
-                    <p class="sue-info-value">@_user.Email</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Rol</p>
-                    <p class="sue-info-value">@_user.Role</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Sesión expira</p>
-                    <p class="sue-info-value">@_tokenExpiryLabel</p>
-                </div>
-            </div>
+            <h2 class="sue-card-title">Hola, @_user.FullName</h2>
+            <p>@_user.Email · @_user.Role</p>
+            <p class="sue-subtitle">Tu identificador: <code>@_user.Id</code></p>
+            <a class="btn-tierra" style="display:inline-block;width:auto" href="/sessions">Mis sesiones y unión por código</a>
         </div>
-
-        @if (_session is null)
+        @if (_session is not null)
         {
             <div class="sue-card">
-                <p class="sue-eyebrow">Primera sesión</p>
-                <h2 class="sue-card-title">Crear tu primera sesión experimental</h2>
-                <p class="sue-subtitle" style="margin-bottom: 20px;">
-                    Esto crea una sesión persistida que servirá como base para conversaciones, emociones y el avatar.
-                    El sistema asignará automáticamente cómo se desarrollará la experiencia.
-                </p>
-
-                <button class="btn-tierra" style="max-width: 320px; margin-top: 16px;"
-                        @onclick="HandleCreateSessionAsync" disabled="@_isCreatingSession">
-                    @(_isCreatingSession ? "Creando sesión..." : "◦ Crear sesión")
-                </button>
+                <h2 class="sue-card-title">Última sesión: @_session.SessionCode</h2>
+                <p>Estado: @_session.Status · @_session.ConversationTurnCount mensajes · @_session.EmotionSampleCount lecturas emocionales</p>
+                <a class="btn-ghost" href="/conversations?sessionId=@_session.Id">Abrir conversación</a>
+                @if (_session.IsTerminal) { <a class="btn-ghost" href="/surveys?sessionId=@_session.Id">Responder encuesta</a> }
             </div>
         }
-        else
-        {
-            <!-- Info sesión -->
-            <div class="sue-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-                    <h2 class="sue-card-title" style="margin: 0;">Sesión activa</h2>
-                    <button class="btn-ghost" style="width: auto; padding: 10px 20px;" 
-                            @onclick="HandleCreateSessionAsync" disabled="@_isCreatingSession">
-                        @(_isCreatingSession ? "Creando..." : "Nueva sesión")
-                    </button>
-                </div>
-
-                <div class="sue-info-grid">
-                    <div>
-                        <p class="sue-info-label">Código</p>
-                        <p class="sue-info-value">@_session.SessionCode</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Estado</p>
-                        <p class="sue-info-value">@_session.Status</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Avatar</p>
-                        <p class="sue-info-value">@_session.AvatarState</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Conversación</p>
-                        <p class="sue-info-value">@_session.ConversationStage</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Emociones</p>
-                        <p class="sue-info-value">@_session.EmotionStage</p>
-                    </div>
-                    <div>
-                        <p class="sue-info-label">Creada</p>
-                        <p class="sue-info-value">@_session.CreatedAtUtc.ToLocalTime().ToString("g")</p>
-                    </div>
-                </div>
-
-                <div style="margin-top: 24px;">
-                    <button class="btn-tierra" style="max-width: 320px;"
-                            @onclick="GoToConversations">
-                        · Ir a la conversación
-                    </button>
-                </div>
-            </div>
-        }
+        <AuthorizeView Roles="Researcher,Administrator"><div class="sue-card"><h2 class="sue-card-title">Investigación</h2><p>Consulta la cola de interlocutores en Sesiones y los datos persistidos en Resultados.</p><a href="/results">Consultar resultados</a></div></AuthorizeView>
     }
+    else if (_error is null) { <div class="sue-card" role="status">Cargando perfil...</div> }
 </div>
-
 @code {
     private AuthenticatedUserDto? _user;
     private ExperimentSessionSnapshotDto? _session;
-    private List<ConversationTurnSnapshotDto> _conversationTurns = new();
-    private bool _isLoading = true;
-    private bool _isCreatingSession;
-    private string? _errorMessage;
-    private string _tokenExpiryLabel = "No disponible";
-
-    protected override async Task OnInitializedAsync()
+    private string? _error;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync()
     {
-        await LoadWorkspaceAsync();
-    }
-
-    private string GetFirstName()
-    {
-        if (string.IsNullOrWhiteSpace(_user?.FullName)) return "amigo";
-        return _user.FullName.Split(' ')[0];
-    }
-
-    private async Task LoadWorkspaceAsync()
-    {
-        _isLoading = true;
-        _errorMessage = null;
-
-        try
-        {
-            _user = await AuthApiClient.GetCurrentUserAsync();
-            var authenticationState = await AuthStateProvider.GetAuthenticationStateAsync();
-            _tokenExpiryLabel = ResolveExpiry(authenticationState.User);
-            _session = await ExperimentSessionApiClient.GetLatestAsync();
-
-            if (_session is not null)
-            {
-                var turns = await ExperimentSessionApiClient.GetConversationTurnsAsync(_session.Id);
-                _conversationTurns = new List<ConversationTurnSnapshotDto>(turns);
-            }
-            else
-            {
-                _conversationTurns.Clear();
-            }
-        }
-        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fworkspace", replace: true);
-        }
-        catch (ApiException exception)
-        {
-            _errorMessage = exception.Message;
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
-
-    private async Task HandleCreateSessionAsync()
-    {
-        _isCreatingSession = true;
-        _errorMessage = null;
-
-        try
-        {
-            // Ya no enviamos PreferredCondition — el backend decide
-            _session = await ExperimentSessionApiClient.CreateBootstrapAsync(new CreateExperimentSessionRequestDto());
-
-            _conversationTurns.Clear();
-        }
-        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fworkspace", replace: true);
-        }
-        catch (ApiException exception)
-        {
-            _errorMessage = exception.Message;
-        }
-        finally
-        {
-            _isCreatingSession = false;
-        }
-    }
-
-    private void GoToConversations()
-    {
-        NavigationManager.NavigateTo("/conversations");
-    }
-
-    private static string ResolveExpiry(ClaimsPrincipal user)
-    {
-        var expValue = user.FindFirst("exp")?.Value;
-
-        if (long.TryParse(expValue, out var unixSeconds))
-        {
-            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds).LocalDateTime.ToString("g");
-        }
-
-        return "No disponible";
+        _error = null;
+        try { _user = await Auth.GetCurrentUserAsync(); _session = await Sessions.GetLatestAsync(); }
+        catch (ApiException ex) { _error = ex.Message; if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized) Navigation.NavigateTo("/login"); }
     }
 }

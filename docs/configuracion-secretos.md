@@ -128,6 +128,45 @@ eslabón `rule-based`—, porque eso es un error de configuración y no una care
 `BaseUrl`, `Model`, los timeouts y los umbrales del cortacircuitos están versionados en
 `appsettings.json`: no son secretos y conviene que todo el equipo use los mismos.
 
+## Correo del restablecimiento de contraseña
+
+El enlace de «¿Olvidaste tu contraseña?» se envía desde una **cuenta Gmail dedicada a SUE**.
+**Nunca** se usa `proinvsemillero@gmail.com` ni la cuenta personal de un integrante.
+
+| Variable | Valor | Tipo |
+|---|---|---|
+| `PasswordReset__BaseUrl` | URL pública de la Web (en local, `http://localhost:5251`) | valor |
+| `Email__From` | la dirección Gmail dedicada | valor |
+| `Email__Smtp__Host` | `smtp.gmail.com` | valor |
+| `Email__Smtp__Port` | `587` (STARTTLS) | valor |
+| `Email__Smtp__Username` | la misma dirección Gmail dedicada | valor |
+| `Email__Smtp__Password` | la contraseña de aplicación de esa cuenta | **secreto** |
+
+### Contraseña de aplicación de Gmail
+
+1. En la cuenta dedicada, activa la **verificación en dos pasos** (Cuenta de Google → Seguridad).
+2. En *Seguridad → Contraseñas de aplicaciones*, crea una llamada «SUE API».
+3. Copia la clave de 16 caracteres: es `Email__Smtp__Password`, no la contraseña normal de la cuenta.
+
+En desarrollo se guarda fuera del repositorio:
+
+```powershell
+dotnet user-secrets --project src/turning.API set "Email:Smtp:Password" "<contraseña-de-aplicación>"
+```
+
+`From` y `Username` deben ser la misma dirección: Gmail reemplaza cualquier otro remitente.
+
+### Sin servidor de correo en local
+
+`appsettings.Development.json` define `Email:PickupDirectory` como `Turning/mail`, una ruta
+relativa a la carpeta local de la aplicación. Con esa clave el correo no se envía: se escribe como
+`.eml` en `%LOCALAPPDATA%\Turning\mail` (en Linux, `~/.local/share/Turning/mail`) y se abre con cualquier cliente
+de correo. Para probar el envío real con Gmail en local, deja `Email__PickupDirectory` vacío y
+configura las variables de la tabla.
+
+Fuera de Development, si falta `Email:Smtp:Host` o `PasswordReset:BaseUrl`, la API arranca igual
+y registra una advertencia: el resto de la plataforma funciona, pero no llega ningún correo.
+
 ## Pendiente
 
 La clave que estuvo en el historial de git seguirá siendo visible ahí. Como nunca

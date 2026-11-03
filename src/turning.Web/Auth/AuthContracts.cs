@@ -15,7 +15,7 @@ public sealed class RegisterRequestDto
 
     public required string Password { get; init; }
 
-    public string Role { get; init; } = "Researcher";
+    public string Role { get; init; } = "Participant";
 }
 
 public sealed class AuthResultDto
@@ -36,6 +36,17 @@ public sealed class AuthenticatedUserDto
     public required string Email { get; init; }
 
     public required string Role { get; init; }
+}
+
+public sealed class PagedUsersDto
+{
+    public List<AuthenticatedUserDto> Items { get; init; } = [];
+
+    public int Total { get; init; }
+
+    public int Page { get; init; }
+
+    public int PageSize { get; init; }
 }
 
 public sealed class ApiErrorResponse

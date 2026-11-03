@@ -37,6 +37,8 @@ public sealed class AiMetadataDto
 /// </remarks>
 public sealed class ConversationTurnResult
 {
+    public const string SourceInterlocutor = "interlocutor";
+    public const string SourcePending = "pending";
     /// <summary>Identificador del turno del participante.</summary>
     public Guid Id { get; init; }
 

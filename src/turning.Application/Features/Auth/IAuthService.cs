@@ -19,4 +19,10 @@ public interface IAuthService
     /// Obtiene el usuario autenticado actual.
     /// </summary>
     Task<AuthenticatedUser> GetCurrentUserAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<AuthenticatedUser> AssignRoleAsync(Guid actorId, Guid userId, string role, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista las cuentas para administración. Solo para Administrator.
+    /// </summary>
+    Task<PagedUsersResult> ListUsersAsync(Guid actorId, string? query, int page, int pageSize, CancellationToken ct = default);
 }

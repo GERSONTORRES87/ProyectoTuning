@@ -84,6 +84,52 @@ public sealed class AdminSurveyResultsServiceTests : IDisposable
         missing.Items.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DeletedResponsesOrSessionsAreExcludedBeforeCountingAndPaging(bool deleteSession)
+    {
+        var fixture = await SeedAsync();
+        var deleted = deleteSession
+            ? (BaseEntity)await _db.ExperimentSessions.SingleAsync(session => session.Id == fixture.BobResponse.SessionId)
+            : fixture.BobResponse;
+        Set(deleted, "IsDeleted", true);
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        var first = await _service.GetResultsAsync(page: 1, pageSize: 1);
+        var beyondLast = await _service.GetResultsAsync(page: 2, pageSize: 1);
+        var deletedParticipant = await _service.GetResultsAsync(participantId: fixture.Bob.Id);
+
+        first.Total.Should().Be(1);
+        first.Items.Should().ContainSingle().Which.ResponseId.Should().Be(fixture.AliceResponse.Id);
+        beyondLast.Total.Should().Be(1);
+        beyondLast.Items.Should().BeEmpty();
+        deletedParticipant.Total.Should().Be(0);
+        deletedParticipant.Items.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeletedAnswersAreExcludedWithoutRemovingTheSubmittedResponse()
+    {
+        var fixture = await SeedAsync();
+        var comments = fixture.OriginalDefinition.Questions.Single(question => question.Code == "comments");
+        var deletedAnswer = fixture.AliceResponse.Answers.Single(answer => answer.SurveyQuestionId == comments.Id);
+        Set(deletedAnswer, "IsDeleted", true);
+        await _db.SaveChangesAsync();
+        _db.ChangeTracker.Clear();
+
+        var result = await _service.GetResultsAsync(participantId: fixture.Alice.Id);
+
+        result.Total.Should().Be(1);
+        var response = result.Items.Should().ContainSingle().Which;
+        response.ResponseId.Should().Be(fixture.AliceResponse.Id);
+        response.Answers.Should().HaveCount(3);
+        response.Answers.Should().NotContain(answer => answer.QuestionId == comments.Id);
+        var empathy = fixture.OriginalDefinition.Questions.Single(question => question.Code == "empathy");
+        response.Answers.Single(answer => answer.QuestionId == empathy.Id).Value.Should().Be("4");
+    }
+
     [Fact]
     public async Task QueryingResultsDoesNotCreateModifyOrTrackSurveyEntities()
     {

@@ -1,103 +1,39 @@
 @page "/settings"
 @attribute [Authorize]
-
-@inject NavigationManager NavigationManager
-@inject IJSRuntime JS
+@inject AuthApiClient Auth
 
 <PageTitle>SUE — Configuración</PageTitle>
-
 <div class="sue-page">
-    <header class="sue-header">
-        <p class="sue-eyebrow">⚙ Preferencias</p>
-        <h1 class="sue-title">Configuración</h1>
-        <p class="sue-subtitle">Personaliza tu experiencia SUE.</p>
-    </header>
-
-    <!-- Perfil -->
-    <div class="sue-card">
-        <h2 class="sue-card-title">Perfil</h2>
-        <p class="sue-subtitle" style="margin-bottom: 20px;">
-            Ajusta tu información visible en la aplicación.
-        </p>
-
-        <div class="sue-two-cols" style="gap: 16px;">
-            <div class="sue-form-field">
-                <label class="sue-form-label">Nombre visible</label>
-                <input class="input-tierra" @bind="_displayName" placeholder="Tu nombre" />
-            </div>
-            <div class="sue-form-field">
-                <label class="sue-form-label">Idioma</label>
-                <select class="input-tierra" @bind="_language">
-                    <option value="es">Español</option>
-                    <option value="en">English</option>
-                </select>
-            </div>
+    <header class="sue-header"><p class="sue-eyebrow">Cuenta</p><h1 class="sue-title">Configuración</h1><p class="sue-subtitle">Consulta tu cuenta y las acciones disponibles para tu rol.</p></header>
+    @if (_error is not null) { <div class="sue-card" role="alert">@_error</div> }
+    @if (_user is not null) { <div class="sue-card"><h2 class="sue-card-title">Tu perfil</h2><p>@_user.FullName · @_user.Email</p><p>Rol: @_user.Role</p><p>Identificador: <code>@_user.Id</code></p><p class="sue-subtitle">La edición de nombre, idioma y recordatorios aún no está disponible.</p></div> }
+    <AuthorizeView Roles="Administrator">
+        <div class="sue-card">
+            <h2 class="sue-card-title">Asignar rol de usuario</h2>
+            <p>Usa el identificador que figura en el perfil de la cuenta. El usuario debe iniciar sesión de nuevo para renovar sus permisos.</p>
+            <form @onsubmit="SaveRoleAsync" @onsubmit:preventDefault>
+                <label class="sue-form-label" for="role-user">Identificador del usuario</label><input id="role-user" class="input-tierra" @bind="_targetId" required />
+                <label class="sue-form-label" for="role-value">Rol</label><select id="role-value" class="input-tierra" @bind="_role"><option>Participant</option><option>Researcher</option><option>Administrator</option></select>
+                <button class="btn-tierra" style="margin-top:16px" disabled="@_busy" type="submit">Guardar rol</button>
+            </form>
+            @if (_confirmation is not null) { <p role="status">@_confirmation</p> }
         </div>
-
-        <button class="btn-tierra" style="margin-top: 16px; width: auto; padding: 12px 28px;" @onclick="SaveSettings">
-            Guardar cambios
-        </button>
-    </div>
-
-    <!-- Experiencia -->
-    <div class="sue-card">
-        <h2 class="sue-card-title">Experiencia</h2>
-        <p class="sue-subtitle" style="margin-bottom: 20px;">
-            Personaliza el comportamiento de SUE.
-        </p>
-
-        <label class="sue-toggle-row">
-            <span>
-                <strong>Animaciones suaves</strong>
-                <small>Mantén las transiciones orgánicas activadas.</small>
-            </span>
-            <input type="checkbox" @bind="_gentleAnimations" />
-        </label>
-
-        <label class="sue-toggle-row">
-            <span>
-                <strong>Recordatorio diario de reflexión</strong>
-                <small>Recibe un aviso para conectar contigo mismo.</small>
-            </span>
-            <input type="checkbox" @bind="_dailyReminder" />
-        </label>
-    </div>
-
-    <!-- Reset -->
-    <div class="sue-card sue-card-danger">
-        <h2 class="sue-card-title" style="color: #8B4A4A;">Datos locales</h2>
-        <p style="color: #8B4A4A; opacity: 0.85; margin: 0 0 16px; font-size: 14px; line-height: 1.6;">
-            Borra la información almacenada localmente y restaura la experiencia inicial de SUE.
-        </p>
-        <button class="btn-danger" @onclick="ResetLocalData">
-            Reiniciar datos locales
-        </button>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(_confirmationMessage))
-    {
-        <p style="padding: 14px 18px; border-radius: 14px; background: rgba(181,196,177,0.35); color: var(--salvia-oscura); font-size: 14px; font-weight: 700;">
-            @_confirmationMessage
-        </p>
-    }
+    </AuthorizeView>
 </div>
-
 @code {
-    private string _displayName = "Valentina";
-    private string _language = "es";
-    private bool _gentleAnimations = true;
-    private bool _dailyReminder;
-    private string? _confirmationMessage;
-
-    private void SaveSettings()
+    private AuthenticatedUserDto? _user;
+    private string _targetId = "", _role = "Participant";
+    private string? _error, _confirmation;
+    private bool _busy;
+    protected override async Task OnInitializedAsync() { try { _user = await Auth.GetCurrentUserAsync(); } catch (ApiException ex) { _error = ex.Message; } }
+    private async Task SaveRoleAsync()
     {
-        _confirmationMessage = "Tus preferencias han sido guardadas.";
-    }
-
-    private async Task ResetLocalData()
-    {
-        await JS.InvokeVoidAsync("sueResetLocalData");
-        _confirmationMessage = "Los datos locales fueron reiniciados.";
-        NavigationManager.NavigateTo("/workspace", replace: true);
+        if (_busy) return;
+        _error = null; _confirmation = null;
+        if (!Guid.TryParse(_targetId, out var id)) { _error = "Escribe un identificador de usuario válido."; return; }
+        _busy = true;
+        try { var user = await Auth.SetRoleAsync(id, _role); _confirmation = $"Rol de {user.FullName} actualizado a {user.Role}. Debe volver a iniciar sesión."; }
+        catch (ApiException ex) { _error = ex.Message; }
+        finally { _busy = false; }
     }
 }

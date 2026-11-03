@@ -45,11 +45,13 @@ public class ExceptionHandlingMiddleware
 
         var statusCode = StatusCodes.Status500InternalServerError;
         var message = "Ocurrió un error interno en el servidor";
+        var code = "INTERNAL_ERROR";
 
         if (exception is NotFoundException)
         {
             statusCode = StatusCodes.Status404NotFound;
             message = exception.Message;
+            code = "RESOURCE_NOT_FOUND";
         }
         else if (exception is TurningApplicationException applicationException)
         {
@@ -57,17 +59,21 @@ public class ExceptionHandlingMiddleware
             {
                 "AUTH_INVALID_CREDENTIALS" => StatusCodes.Status401Unauthorized,
                 "AUTH_USER_ALREADY_EXISTS" => StatusCodes.Status409Conflict,
+                "AUTH_FORBIDDEN" or "AUTH_ROLE_FORBIDDEN" => StatusCodes.Status403Forbidden,
+                "SESSION_NOT_FOUND" => StatusCodes.Status404NotFound,
+                "SESSION_CONFLICT" or "SESSION_TERMINAL" or "SESSION_NOT_STARTED" => StatusCodes.Status409Conflict,
                 _ => StatusCodes.Status400BadRequest
             };
 
             message = exception.Message;
+            code = applicationException.Code ?? "INVALID_REQUEST";
         }
 
         var response = new
         {
-            message,
-            type = exception.GetType().Name,
-            details = exception.Message
+            error = code,
+            code,
+            message
         };
 
         context.Response.StatusCode = statusCode;

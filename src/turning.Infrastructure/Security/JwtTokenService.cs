@@ -50,7 +50,8 @@ public sealed class JwtTokenService : ITokenService
             new(ClaimTypes.NameIdentifier, userAccount.Id.ToString()),
             new(ClaimTypes.Name, userAccount.FullName),
             new(ClaimTypes.Email, userAccount.Email),
-            new(ClaimTypes.Role, userAccount.Role)
+            new(ClaimTypes.Role, userAccount.Role),
+            new(PasswordStamp.ClaimType, PasswordStamp.Of(userAccount))
         };
 
         var tokenDescriptor = new JwtSecurityToken(

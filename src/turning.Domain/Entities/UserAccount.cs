@@ -82,6 +82,13 @@ public sealed class UserAccount : BaseEntity
         UpdatedAt = LastLoginAt;
     }
 
+    public void AssignRole(string role)
+    {
+        if (!UserRoles.IsKnown(role)) throw new ArgumentException("El rol no es válido.", nameof(role));
+        Role = UserRoles.Normalize(role);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     /// <summary>
     /// Actualiza el hash de la contraseña.
     /// </summary>

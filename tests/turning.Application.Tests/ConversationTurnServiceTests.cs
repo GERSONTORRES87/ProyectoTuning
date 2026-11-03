@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using System.Text.Json;
 using Turning.Application.Features.ConversationTurns;
 using Turning.Application.Features.Emotions;
 using Turning.Application.Features.ExperimentSessions;
@@ -33,6 +34,7 @@ public class ConversationTurnServiceTests
 
     public ConversationTurnServiceTests()
     {
+        _conversationTurnRepository.TrySaveReplyAsync(Arg.Any<CancellationToken>()).Returns(true);
         _emotionAnalysis.Analyze(Arg.Any<string>()).Returns(new TextEmotionDto(
             EmotionId: "neutral",
             Confidence: 0,
@@ -50,12 +52,35 @@ public class ConversationTurnServiceTests
         var session = ExperimentSession.Create(ownerUserId, condition);
         _experimentSessionRepository.GetByIdAsync(session.Id, Arg.Any<CancellationToken>()).Returns(session);
         _conversationTurnRepository.ListBySessionAsync(session.Id, Arg.Any<CancellationToken>()).Returns([]);
-        _conversationTurnRepository.GetNextSequenceNumberAsync(session.Id, Arg.Any<CancellationToken>()).Returns(nextSequence);
+        _conversationTurnRepository.GetNextSequenceNumberAsync(session.Id, Arg.Any<CancellationToken>()).Returns(nextSequence, nextSequence + 1);
         return session;
     }
 
     private static InterlocutorReplyOutcome SuccessfulReply(string text = "Respuesta generada por IA.") =>
         new(text, "rule-based", "rule-based", 5, false, null, 1, ["rule-based"]);
+
+    [Fact]
+    public async Task Participant_ShouldReceiveAnAcknowledgmentAndHistoryWithoutAiIdentifiers()
+    {
+        var owner = Guid.NewGuid();
+        var session = ArrangeSession(ExperimentalCondition.AI, owner);
+        var service = CreateService();
+        _orchestrator.ResolveReplyAsync(session, Arg.Any<ConversationTurn>(), Arg.Any<IReadOnlyList<ConversationTurn>>(),
+            Arg.Any<EmotionContext?>(), Arg.Any<CancellationToken>()).Returns(SuccessfulReply());
+
+        var acknowledgment = await service.AddAsync(owner, session.Id, new AddConversationTurnRequest { Message = "Hola" });
+        acknowledgment.Source.Should().Be(ConversationTurnResult.SourcePending);
+        acknowledgment.Ai.Should().BeNull();
+        acknowledgment.InterlocutorTurn.Should().BeNull();
+
+        var original = ConversationTurn.Create(session.Id, 1, ConversationActor.Participant, "Hola");
+        var reply = ConversationTurn.Create(session.Id, 2, ConversationActor.Interlocutor, "Te escucho");
+        reply.LinkOriginatingTurn(original.Id);
+        _conversationTurnRepository.ListBySessionAsync(session.Id, Arg.Any<CancellationToken>()).Returns([original, reply]);
+        var history = await service.ListAsync(owner, session.Id);
+        history.Should().HaveCount(2);
+        history.Should().OnlyContain(turn => turn.OriginatingTurnId == null);
+    }
 
     [Fact]
     public async Task AddAsync_ShouldPersistParticipantTurnAndAiInterlocutorReply_ForAiSessions()
@@ -104,7 +129,7 @@ public class ConversationTurnServiceTests
         var result = await service.AddAsync(ownerUserId, session.Id, new AddConversationTurnRequest
         {
             Message = "Buenas."
-        });
+        }, isPrivilegedRequester: true);
 
         // Assert: antes estos datos se descartaban y el cliente tenía que releer la lista.
         result.Source.Should().Be(ConversationTurnResult.SourceAi);
@@ -116,6 +141,32 @@ public class ConversationTurnServiceTests
         result.Ai.Model.Should().Be("gpt-x");
         result.Ai.LatencyMs.Should().Be(412);
         result.Degraded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldPublishTheAiReplyEventWithTheKeysOfAHumanTurnEvent()
+    {
+        var published = new List<(string Type, string Json)>();
+        _eventPublisher.When(publisher => publisher.Publish(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<object>()))
+            .Do(call => published.Add((call.ArgAt<string>(1), JsonSerializer.Serialize(call.ArgAt<object>(2)))));
+        var ownerUserId = Guid.NewGuid();
+        var session = ArrangeSession(ExperimentalCondition.AI, ownerUserId);
+        _orchestrator.ResolveReplyAsync(session, Arg.Any<ConversationTurn>(), Arg.Any<IReadOnlyList<ConversationTurn>>(),
+            Arg.Any<EmotionContext?>(), Arg.Any<CancellationToken>()).Returns(SuccessfulReply());
+
+        await CreateService().AddAsync(ownerUserId, session.Id, new AddConversationTurnRequest { Message = "Hola" });
+
+        var turnEvent = JsonDocument.Parse(published.Single(e => e.Type == ExperimentEventTypes.ConversationTurnAdded).Json).RootElement;
+        var replyEvent = JsonDocument.Parse(published.Single(e => e.Type == ExperimentEventTypes.AiReplyGenerated).Json).RootElement;
+        // La proyeccion del participante renombra la respuesta de IA a ConversationTurnAdded y conserva
+        // solo estas claves: si falta alguna, la respuesta de IA se distingue de un turno humano.
+        foreach (var key in new[] { "turnId", "sequenceNumber", "sender" })
+        {
+            turnEvent.TryGetProperty(key, out _).Should().BeTrue(key);
+            replyEvent.TryGetProperty(key, out _).Should().BeTrue(key);
+        }
+        replyEvent.GetProperty("sender").GetString().Should().Be("Interlocutor");
+        replyEvent.GetProperty("sequenceNumber").GetInt32().Should().Be(2);
     }
 
     [Fact]
@@ -135,7 +186,7 @@ public class ConversationTurnServiceTests
         var result = await service.AddAsync(ownerUserId, session.Id, new AddConversationTurnRequest
         {
             Message = "Mensaje que sobrevive."
-        });
+        }, isPrivilegedRequester: true);
 
         // Assert: el turno del participante se conserva y la degradación no se oculta.
         result.Message.Should().Be("Mensaje que sobrevive.");
@@ -145,6 +196,12 @@ public class ConversationTurnServiceTests
         result.EventId.Should().Be(eventId);
         session.ConversationTurnCount.Should().Be(1);
         _eventPublisher.Received(1).Publish(session.Id, ExperimentEventTypes.DegradedOperation, Arg.Any<object>());
+        var payload = _eventPublisher.ReceivedCalls().Single(call => call.GetMethodInfo().Name == nameof(IExperimentEventPublisher.Publish)
+            && Equals(call.GetArguments()[1], ExperimentEventTypes.DegradedOperation)).GetArguments()[2];
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        document.RootElement.GetProperty("code").GetString().Should().Be("TEXT_GENERATION_DEGRADED");
+        document.RootElement.GetProperty("message").GetString().Should().Be("No se pudo completar la respuesta del interlocutor.");
+        document.RootElement.GetProperty("retryable").GetBoolean().Should().BeTrue();
     }
 
     [Fact]
@@ -169,7 +226,8 @@ public class ConversationTurnServiceTests
 
         // Assert: si el proveedor tumba el proceso, el mensaje del participante ya está guardado.
         savedBeforeGenerating.Should().Be(1);
-        await _conversationTurnRepository.Received(2).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _conversationTurnRepository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _conversationTurnRepository.Received(1).TrySaveReplyAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -229,7 +287,7 @@ public class ConversationTurnServiceTests
 
         // Assert
         result.SequenceNumber.Should().Be(1);
-        result.Source.Should().Be(ConversationTurnResult.SourceNone);
+        result.Source.Should().Be(ConversationTurnResult.SourcePending);
         result.InterlocutorTurn.Should().BeNull();
         result.Ai.Should().BeNull();
         session.ConversationTurnCount.Should().Be(1);

@@ -94,12 +94,14 @@ public static class OpenAiErrorClassifier
         {
             using var document = JsonDocument.Parse(body);
 
-            if (document.RootElement.TryGetProperty("error", out var error))
+            if (document.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object)
             {
-                if (error.TryGetProperty("type", out var type))
+                if (error.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String)
                     return type.GetString();
 
-                if (error.TryGetProperty("code", out var code))
+                // OpenAI manda "code" como texto; OpenRouter lo manda como número (429).
+                if (error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
                     return code.GetString();
             }
         }

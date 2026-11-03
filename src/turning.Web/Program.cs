@@ -80,9 +80,13 @@ internal sealed class BlazorServerAuthHandler : Microsoft.AspNetCore.Authenticat
     protected override Task<Microsoft.AspNetCore.Authentication.AuthenticateResult> HandleAuthenticateAsync()
         => Task.FromResult(Microsoft.AspNetCore.Authentication.AuthenticateResult.NoResult());
 
-    // No redirige: Blazor maneja el redirect vía RedirectToLogin
+    // Una recarga llega antes de que el circuito pueda leer el token del navegador.
     protected override Task HandleChallengeAsync(Microsoft.AspNetCore.Authentication.AuthenticationProperties properties)
-        => Task.CompletedTask;
+    {
+        var returnUrl = $"{Request.PathBase}{Request.Path}{Request.QueryString}";
+        Response.Redirect($"{Request.PathBase}/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        return Task.CompletedTask;
+    }
 
     // No prohíbe: Blazor maneja el 403
     protected override Task HandleForbiddenAsync(Microsoft.AspNetCore.Authentication.AuthenticationProperties properties)

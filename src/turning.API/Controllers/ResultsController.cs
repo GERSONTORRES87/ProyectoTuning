@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using Turning.Application.Features.Events;
 using Turning.Application.Features.ExperimentSessions;
 
@@ -45,8 +46,11 @@ public sealed class ResultsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetResult(Guid sessionId, CancellationToken ct)
     {
-        try { var r = await _svc.GetResultAsync(sessionId, ct); return Ok(r); }
-        catch (InvalidOperationException) { return NotFound(); }
+        var claim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        Guid.TryParse(claim, out var userId);
+        var privileged = User.IsInRole("Researcher") || User.IsInRole("Administrator");
+        try { var r = await _svc.GetResultAsync(sessionId, ct, userId, privileged); return Ok(r); }
+        catch (InvalidOperationException ex) when (ex.Message == "SESSION_NOT_FOUND") { return NotFound(new { error = ex.Message }); }
     }
 
     /// <summary>
@@ -74,7 +78,7 @@ public sealed class ResultsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> List([FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string? condition, [FromQuery] int page=1, [FromQuery] int pageSize=50, CancellationToken ct=default)
     {
-        var r = await _svc.ListAsync(from,to,condition,page,pageSize,ct);
-        return Ok(r);
+        try { return Ok(await _svc.ListAsync(from,to,condition,page,pageSize,ct)); }
+        catch (ArgumentException ex) { return BadRequest(new { error = ex.Message }); }
     }
 }

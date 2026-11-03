@@ -85,3 +85,23 @@
     top: 61px;
     z-index: 29;
 }
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    padding: 16px 48px 16px 24px;
+    background: #fff3cd;
+    color: #594d2d;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+}
+
+#blazor-error-ui .dismiss {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    cursor: pointer;
+}

@@ -1,6 +1,7 @@
 namespace Turning.Application.DependencyInjection;
 
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Turning.Application.Features.Auth;
 using Turning.Application.Features.ConversationTurns;
 using Turning.Application.Features.ExperimentSessions;
@@ -22,6 +23,9 @@ public static class DependencyInjectionExtensions
         // services.AddValidatorsFromAssembly(typeof(DependencyInjectionExtensions).Assembly);
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPasswordResetService, PasswordResetService>();
+        services.AddSingleton<PasswordResetCooldown>();
+        services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<Features.Emotions.ITextEmotionAnalysisService, Features.Emotions.TextEmotionAnalysisService>();
         services.AddScoped<IConversationOrchestrator, ConversationOrchestrator>();
         services.AddScoped<IConversationTurnService, ConversationTurnService>();

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Turning.API.Filters;
 using Turning.API.Middleware;
 using Turning.Application.Features.ExperimentSessions;
 using TurningApplicationException = Turning.Application.Exceptions.ApplicationException;
@@ -98,6 +99,7 @@ public sealed class SessionPairingController : ControllerBase
     /// <response code="403">El usuario no tiene rol Researcher ni Administrator.</response>
     [HttpPost("{sessionId:guid}/interlocutor")]
     [Authorize(Roles = "Researcher,Administrator")]
+    [AllowPrivilegedSessionWrite]
     [ProducesResponseType(typeof(ExperimentSessionSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
@@ -124,6 +126,7 @@ public sealed class SessionPairingController : ControllerBase
     /// <response code="403">El usuario no tiene rol Researcher ni Administrator.</response>
     [HttpDelete("{sessionId:guid}/interlocutor")]
     [Authorize(Roles = "Researcher,Administrator")]
+    [AllowPrivilegedSessionWrite]
     [ProducesResponseType(typeof(ExperimentSessionSnapshot), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

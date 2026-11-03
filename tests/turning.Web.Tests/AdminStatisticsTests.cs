@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -49,24 +51,64 @@ public sealed class AdminStatisticsTests
     {
         var html = await RenderAsync(new StatisticsHandler([], failConnection: true));
 
-        html.Should().Contain("No fue posible conectar");
+        html.Should().Contain("conectar con la API");
         html.Should().Contain("role=\"alert\"");
     }
 
-    private static async Task<string> RenderAsync(StatisticsHandler handler)
+    [Fact]
+    public async Task ResearcherSeesStatisticsWithoutLoadingOrEditingUserRoles()
+    {
+        var handler = new StatisticsHandler([]);
+
+        var html = await RenderAsync(handler, "Researcher");
+
+        html.Should().Contain("No hay sesiones activas");
+        html.Should().NotContain("Roles de usuario");
+        html.Should().NotContain("role-search");
+        handler.UsersRequested.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AdministratorCanManageRolesEvenWhenStatisticsAreUnavailable()
+    {
+        var handler = new StatisticsHandler([], failConnection: true);
+
+        var html = await RenderAsync(handler, "Administrator");
+
+        html.Should().Contain("conectar con la API");
+        html.Should().Contain("Roles de usuario");
+        html.Should().Contain("role-search");
+        html.Should().Contain("agent@example.test");
+        html.Should().Contain("Guardar");
+        handler.UsersRequested.Should().Be(1);
+    }
+
+    private static async Task<string> RenderAsync(StatisticsHandler handler, string role = "Researcher")
     {
         using var client = new HttpClient(handler) { BaseAddress = new Uri("http://local.test/") };
         var authSession = new AuthSession();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddAuthorizationCore();
         services.AddSingleton(new ExperimentSessionApiClient(client, authSession));
+        services.AddSingleton(new AuthApiClient(client, authSession));
         services.AddSingleton<NavigationManager>(new TestNavigationManager());
         services.AddSingleton(new TokenAuthenticationStateProvider(new BrowserTokenStore(new UnusedJsRuntime()), authSession));
+        services.AddSingleton<AuthenticationStateProvider>(new FixedAuthenticationStateProvider(role));
         await using var provider = services.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());
         return await renderer.Dispatcher.InvokeAsync(async () =>
         {
-            var result = await renderer.RenderComponentAsync<Admin>();
+            RenderFragment admin = builder =>
+            {
+                builder.OpenComponent<Admin>(0);
+                builder.CloseComponent();
+            };
+            var parameters = ParameterView.FromDictionary(new Dictionary<string, object?>
+            {
+                [nameof(CascadingAuthenticationState.ChildContent)] = admin
+            });
+            var result = await renderer.RenderComponentAsync<CascadingAuthenticationState>(parameters);
             return result.ToHtmlString();
         });
     }
@@ -88,9 +130,25 @@ public sealed class AdminStatisticsTests
         bool failConnection = false) : HttpMessageHandler
     {
         public List<Guid> DetailsRequested { get; } = [];
+        public int UsersRequested { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (request.RequestUri!.AbsolutePath == "/api/auth/users")
+            {
+                UsersRequested++;
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new PagedUsersDto
+                    {
+                        Items = [new AuthenticatedUserDto
+                        {
+                            Id = Guid.NewGuid(), FullName = "Agent", Email = "agent@example.test", Role = "Participant"
+                        }],
+                        Total = 1, Page = 1, PageSize = 20
+                    })
+                });
+            }
             if (failConnection) throw new HttpRequestException("offline");
             if (request.RequestUri!.AbsolutePath == "/api/results")
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -109,6 +167,13 @@ public sealed class AdminStatisticsTests
                 })
             });
         }
+    }
+
+    private sealed class FixedAuthenticationStateProvider(string role) : AuthenticationStateProvider
+    {
+        public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(
+            new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim(ClaimTypes.Name, "Test user"), new Claim(ClaimTypes.Role, role)], "test"))));
     }
 
     private sealed class TestNavigationManager : NavigationManager

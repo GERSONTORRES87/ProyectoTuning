@@ -67,11 +67,12 @@ public class OpenAiCompatibleProviderTests
         RequestTimeoutMs = 2000
     };
 
-    private static OpenAiCompatibleTextGenerationProvider CreateProvider(StubHandler handler, int maxRetries = 3)
+    private static OpenAiCompatibleTextGenerationProvider CreateProvider(
+        StubHandler handler, int maxRetries = 3, AiProviderOptions? options = null)
     {
         var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.test.local/v1/") };
         return new OpenAiCompatibleTextGenerationProvider(
-            client, Options(), "Eres un interlocutor.", maxRetries, NullLogger.Instance);
+            client, options ?? Options(), "Eres un interlocutor.", maxRetries, NullLogger.Instance);
     }
 
     private static TextGenerationRequest Request() => new()
@@ -112,6 +113,30 @@ public class OpenAiCompatibleProviderTests
         request.Headers.Authorization!.Scheme.Should().Be("Bearer");
         request.Headers.Authorization.Parameter.Should().Be("sk-test");
         request.RequestUri!.AbsoluteUri.Should().EndWith("/chat/completions");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldNotSendReasoning_ByDefault()
+    {
+        // OpenAI rechaza parámetros que no conoce: el campo solo debe salir si se pide.
+        var handler = new StubHandler().Enqueue(HttpStatusCode.OK, SuccessBody);
+
+        await CreateProvider(handler).GenerateAsync(Request(), CancellationToken.None);
+
+        handler.CapturedBodies.Single().Should().NotContain("reasoning");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldDisableReasoning_WhenConfigured()
+    {
+        // Los modelos de razonamiento gastan max_tokens pensando y devuelven content null.
+        var options = Options();
+        options.DisableReasoning = true;
+        var handler = new StubHandler().Enqueue(HttpStatusCode.OK, SuccessBody);
+
+        await CreateProvider(handler, options: options).GenerateAsync(Request(), CancellationToken.None);
+
+        handler.CapturedBodies.Single().Should().Contain("\"reasoning\":{\"enabled\":false}");
     }
 
     [Fact]

@@ -7,6 +7,7 @@
 
 @implements IDisposable
 @inject ExperimentSessionApiClient ExperimentSessionApiClient
+@inject AuthApiClient AuthApiClient
 @inject NavigationManager NavigationManager
 @inject TokenAuthenticationStateProvider AuthStateProvider
 
@@ -130,6 +131,85 @@
             </details>
         }
     }
+
+    @* Fuera del bloque de estadísticas: si estas fallan, los roles se siguen pudiendo gestionar. *@
+    <AuthorizeView Roles="Administrator">
+        <div class="sue-card" id="roles">
+            <h2 class="sue-card-title">Roles de usuario</h2>
+            <p class="sue-subtitle">Busca una cuenta por nombre o correo y cambia su rol. La persona debe volver a iniciar sesión para que el cambio se aplique.</p>
+
+            <form @onsubmit="SearchUsersAsync" @onsubmit:preventDefault style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin: 16px 0;">
+                <div style="flex: 1; min-width: 220px;">
+                    <label for="role-search" class="sue-form-label">Buscar cuenta</label>
+                    <input id="role-search" class="input-tierra" @bind="_userQuery" placeholder="Nombre o correo" />
+                </div>
+                <button type="submit" class="btn-ghost" style="width: auto;" disabled="@_usersBusy">Buscar</button>
+            </form>
+
+            @if (_usersError is not null)
+            {
+                <p role="alert" style="color: #8B4A4A;">@_usersError</p>
+            }
+            @if (_roleNotice is not null)
+            {
+                <p role="status" style="color: var(--salvia-oscura); font-weight: 700;">@_roleNotice</p>
+            }
+
+            @if (_users is null)
+            {
+                <p class="sue-subtitle">Cargando cuentas...</p>
+            }
+            else if (_users.Items.Count == 0)
+            {
+                <p class="sue-subtitle">No hay cuentas que coincidan con la búsqueda.</p>
+            }
+            else
+            {
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <thead>
+                            <tr>
+                                <th style="text-align: left; padding: 8px;">Nombre</th>
+                                <th style="text-align: left; padding: 8px;">Correo</th>
+                                <th style="text-align: left; padding: 8px;">Rol</th>
+                                <th style="text-align: left; padding: 8px;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var account in _users.Items)
+                            {
+                                <tr style="border-top: 1px solid var(--arena-media);">
+                                    <td style="padding: 10px 8px;">@account.FullName</td>
+                                    <td style="padding: 10px 8px; word-break: break-all;">@account.Email</td>
+                                    <td style="padding: 10px 8px;">
+                                        <select class="input-tierra" aria-label="Rol de @account.Email" value="@RoleFor(account)"
+                                                @onchange="change => _pendingRoles[account.Id] = change.Value?.ToString() ?? account.Role">
+                                            @foreach (var role in Roles)
+                                            {
+                                                <option value="@role">@role</option>
+                                            }
+                                        </select>
+                                    </td>
+                                    <td style="padding: 10px 8px;">
+                                        <button class="btn-tierra" style="width: auto; padding: 8px 18px;"
+                                                disabled="@(_usersBusy || RoleFor(account) == account.Role)" @onclick="() => SaveRoleAsync(account)">
+                                            Guardar
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px;">
+                    <button class="btn-ghost" style="width: auto;" disabled="@(_usersBusy || _usersPage == 1)" @onclick="() => LoadUsersAsync(_usersPage - 1)">Anterior</button>
+                    <span>Página @_usersPage · @_users.Total cuentas</span>
+                    <button class="btn-ghost" style="width: auto;" disabled="@(_usersBusy || _usersPage * _users.PageSize >= _users.Total)" @onclick="() => LoadUsersAsync(_usersPage + 1)">Siguiente</button>
+                </div>
+            }
+        </div>
+    </AuthorizeView>
 </div>
 
 @code {
@@ -148,11 +228,82 @@
 
     private string PredominantEmotion => _totals.Count == 0 ? "—" : EmotionLabel(_totals.MaxBy(pair => pair.Value).Key);
 
+    private static readonly string[] Roles = ["Participant", "Researcher", "Administrator"];
+
+    [CascadingParameter] public Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+
+    private PagedUsersDto? _users;
+    private readonly Dictionary<Guid, string> _pendingRoles = new();
+    private string _userQuery = "";
+    private int _usersPage = 1;
+    private bool _usersBusy;
+    private string? _usersError;
+    private string? _roleNotice;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAsync();
         if (!_disposed)
             _timer = new Timer(_ => _ = RefreshAsync(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+
+        if (!_disposed && (await AuthenticationState).User.IsInRole("Administrator"))
+            await LoadUsersAsync(1);
+    }
+
+    private string RoleFor(AuthenticatedUserDto account) => _pendingRoles.GetValueOrDefault(account.Id, account.Role);
+
+    private Task SearchUsersAsync() => LoadUsersAsync(1);
+
+    private async Task LoadUsersAsync(int page)
+    {
+        if (_usersBusy || _disposed) return;
+
+        _usersBusy = true;
+        _usersError = null;
+
+        try
+        {
+            _users = await AuthApiClient.ListUsersAsync(_userQuery.Trim(), page, _disposeSource.Token);
+            _usersPage = page;
+            _pendingRoles.Clear();
+        }
+        catch (OperationCanceledException) when (_disposed) { }
+        catch (ApiException exception)
+        {
+            _usersError = exception.Message;
+        }
+        finally
+        {
+            _usersBusy = false;
+        }
+    }
+
+    private async Task SaveRoleAsync(AuthenticatedUserDto account)
+    {
+        if (_usersBusy || _users is null || _disposed) return;
+
+        _usersBusy = true;
+        _usersError = null;
+        _roleNotice = null;
+
+        try
+        {
+            var updated = await AuthApiClient.SetRoleAsync(account.Id, RoleFor(account), _disposeSource.Token);
+            _roleNotice = $"Rol de {updated.FullName} actualizado a {updated.Role}. Debe volver a iniciar sesión.";
+            var index = _users.Items.FindIndex(item => item.Id == account.Id);
+            if (index >= 0) _users.Items[index] = updated;
+        }
+        catch (OperationCanceledException) when (_disposed) { }
+        catch (ApiException exception)
+        {
+            // Por ejemplo, un administrador que intenta quitarse su propio rol: se muestra el rechazo y se vuelve al rol real.
+            _usersError = exception.Message;
+        }
+        finally
+        {
+            _pendingRoles.Remove(account.Id);
+            _usersBusy = false;
+        }
     }
 
     private async Task RefreshAsync()

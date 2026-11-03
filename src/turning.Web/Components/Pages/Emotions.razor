@@ -1,144 +1,126 @@
 @page "/emotions"
-@attribute [Authorize(Roles = "Administrator,Researcher")]
-
+@attribute [Authorize]
 @using turning.Web.ExperimentSessions
-
-@inject ExperimentSessionApiClient ExperimentSessionApiClient
+@inject ExperimentSessionApiClient Sessions
 
 <PageTitle>SUE — Lectura de Emociones</PageTitle>
-
 <div class="sue-page">
     <header class="sue-header">
         <p class="sue-eyebrow">◇ Conciencia</p>
-        <h1 class="sue-title">Lectura de Emociones</h1>
-        <p class="sue-subtitle">Explora tu paisaje emocional reciente.</p>
+        <h1 class="sue-title">Emociones de la sesión</h1>
+        <p class="sue-subtitle">Lecturas registradas y autoinforme del participante.</p>
     </header>
-
-    <!-- Grid de emociones -->
-    <div class="sue-emotions-grid">
-        @foreach (var emotion in _emotions)
-        {
-            <div class="sue-emotion-card @(emotion.Selected ? "selected" : "")" @onclick="() => SelectEmotion(emotion)">
-                <div class="sue-emotion-icon">@emotion.Icon</div>
-                <h3 class="sue-emotion-title">@emotion.Name</h3>
-                <p class="sue-emotion-desc">@emotion.Description</p>
-                <div class="sue-emotion-bar">
-                    <div class="sue-emotion-fill" style="width: @(emotion.Level)% ; background: @emotion.Color;"></div>
-                </div>
-                <p class="sue-emotion-intensity">@emotion.Level% intensidad</p>
+    <SessionSelector SessionId="SessionId" OnSelected="LoadAsync" />
+    @if (_error is not null) { <div class="sue-card" role="alert">@_error</div> }
+    @if (_confirmation is not null) { <div class="sue-card" role="status">@_confirmation</div> }
+    @if (_session is not null)
+    {
+        <div class="sue-two-cols">
+            <div class="sue-card">
+                <h2 class="sue-card-title">Balance emocional</h2>
+                <EmotionIntensityChart Levels="EmotionLevels" Colors="EmotionColors" />
+                <p class="sue-subtitle">Última intensidad registrada de cada emoción en esta sesión.</p>
             </div>
-        }
-    </div>
-
-    <!-- Balance de intensidad + Formulario -->
-    <div class="sue-two-cols">
-        <!-- Barras de intensidad -->
-        <div class="sue-card">
-            <h2 class="sue-card-title">Balance emocional</h2>
-            <EmotionIntensityChart Levels="EmotionLevels" Colors="EmotionColors" />
-        </div>
-
-        <!-- Registrar emoción -->
-        <div class="sue-card">
-            <h2 class="sue-card-title">Registrar un sentimiento</h2>
-            <p class="sue-subtitle" style="margin-bottom: 20px;">
-                Añade una entrada emocional a tu viaje.
-            </p>
-
-            <div class="sue-form-field">
-                <label class="sue-form-label">Emoción</label>
-                <select class="input-tierra" @bind="_selectedEmotionName">
-                    @foreach (var emotion in _emotions)
-                    {
-                        <option value="@emotion.Name">@emotion.Name</option>
-                    }
-                </select>
-            </div>
-
-            <div class="sue-form-field">
-                <label class="sue-form-label">
-                    Intensidad: <span style="color: var(--terracota-oscura);">@_selectedIntensity</span>/10
-                </label>
-                <input type="range" min="1" max="10" value="@_selectedIntensity"
-                       class="sue-slider"
-                       @oninput="OnIntensityChanged" />
-            </div>
-
-            <div class="sue-form-field">
-                <label class="sue-form-label">Nota (opcional)</label>
-                <textarea class="input-tierra" rows="3" placeholder="¿Qué está pasando?"
-                          @bind="_emotionNote"></textarea>
-            </div>
-
-            <button class="btn-tierra" style="margin-top: 12px;" @onclick="SaveEmotion">
-                ◇ Guardar sentimiento
-            </button>
-
-            @if (!string.IsNullOrWhiteSpace(_confirmationMessage))
+            @if (_session.IsOwner && _session.Status == "Active")
             {
-                <p style="margin-top: 16px; padding: 12px; border-radius: 12px; background: rgba(181,196,177,0.35); color: var(--salvia-oscura); font-size: 14px; font-weight: 700;">
-                    @_confirmationMessage
-                </p>
+                <div class="sue-card">
+                    <h2 class="sue-card-title">Registrar cómo te sientes</h2>
+                    <div class="sue-form-field">
+                        <label class="sue-form-label" for="emotion-name">Emoción</label>
+                        <select id="emotion-name" class="input-tierra" @bind="_emotion" disabled="@_busy">
+                            <option value="joy">Alegría</option>
+                            <option value="sadness">Tristeza</option>
+                            <option value="anger">Enojo</option>
+                            <option value="surprise">Sorpresa</option>
+                            <option value="neutral">Neutral</option>
+                        </select>
+                    </div>
+                    <div class="sue-form-field">
+                        <label class="sue-form-label" for="emotion-score">Intensidad: @_intensity / 10</label>
+                        <input id="emotion-score" class="sue-slider" type="range" min="0" max="10" @bind="_intensity" @bind:event="oninput" disabled="@_busy" />
+                    </div>
+                    <button class="btn-tierra" disabled="@_busy" @onclick="SaveAsync">@(_busy ? "Guardando…" : "Guardar lectura emocional")</button>
+                </div>
             }
         </div>
-    </div>
+        <div class="sue-card">
+            <h2 class="sue-card-title">Lecturas persistidas</h2>
+            @if (_readings.Length == 0) { <p>No hay lecturas registradas.</p> }
+            @foreach (var reading in _readings.OrderByDescending(reading => reading.CapturedAtUtc))
+            {
+                <div style="padding:12px 0;border-bottom:1px solid var(--arena-media)"><strong>@EmotionLabel(reading.Emotion)</strong> · @reading.Score.ToString("P0") · @reading.Source · @reading.CapturedAtUtc.ToLocalTime().ToString("g")</div>
+            }
+            <button class="btn-ghost" disabled="@_busy" @onclick="RefreshAsync">Actualizar lecturas</button>
+        </div>
+    }
 </div>
 
 @code {
-    private class EmotionItem
-    {
-        public string Name { get; set; } = "";
-        public string Icon { get; set; } = "";
-        public string Description { get; set; } = "";
-        public int Level { get; set; }
-        public string Color { get; set; } = "";
-        public bool Selected { get; set; }
-    }
+    [SupplyParameterFromQuery] public Guid? SessionId { get; set; }
+    private ExperimentSessionSnapshotDto? _session;
+    private EmotionDto[] _readings = [];
+    private string _emotion = "neutral";
+    private int _intensity = 5;
+    private bool _busy;
+    private string? _error, _confirmation;
 
-    private List<EmotionItem> _emotions = new()
+    private IReadOnlyDictionary<string, int> EmotionLevels => _readings
+        .Where(reading => !string.IsNullOrWhiteSpace(reading.Emotion))
+        .GroupBy(reading => EmotionLabel(reading.Emotion), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(group => group.Key, group => (int)Math.Round(Math.Clamp(group.OrderByDescending(reading => reading.CapturedAtUtc).First().Score, 0, 1) * 100), StringComparer.OrdinalIgnoreCase);
+
+    private static readonly IReadOnlyDictionary<string, string> EmotionColors = new Dictionary<string, string>
     {
-        new() { Name = "Alegría", Icon = "○", Description = "Energía positiva y conexión.", Level = 82, Color = "#E8C9A0" },
-        new() { Name = "Calma", Icon = "◌", Description = "Equilibrio, descanso y presencia.", Level = 74, Color = "#B5C4B1" },
-        new() { Name = "Tristeza", Icon = "△", Description = "Una señal para reflexionar y cuidarte.", Level = 39, Color = "#D4B8A7" },
-        new() { Name = "Ansiedad", Icon = "≈", Description = "Un recordatorio para respirar.", Level = 28, Color = "#D5C4D4" }
+        ["Alegría"] = "#E8C9A0", ["Neutral"] = "#B5C4B1", ["Tristeza"] = "#D4B8A7",
+        ["Enojo"] = "#C4957A", ["Sorpresa"] = "#D5C4D4", ["Confusión"] = "#C2B6CF"
     };
 
-    private string _selectedEmotionName = "Alegría";
-    private int _selectedIntensity = 7;
-    private string _emotionNote = string.Empty;
-    private string? _confirmationMessage;
-
-    private IReadOnlyDictionary<string, int> EmotionLevels => _emotions.ToDictionary(emotion => emotion.Name, emotion => emotion.Level);
-
-    private IReadOnlyDictionary<string, string> EmotionColors => _emotions.ToDictionary(emotion => emotion.Name, emotion => emotion.Color);
-
-    private void SelectEmotion(EmotionItem emotion)
+    private async Task LoadAsync(ExperimentSessionSnapshotDto? session)
     {
-        foreach (var e in _emotions) e.Selected = false;
-        emotion.Selected = true;
-        _selectedEmotionName = emotion.Name;
-        _confirmationMessage = null;
+        _session = session;
+        _readings = [];
+        _error = null;
+        _confirmation = null;
+        await RefreshAsync();
     }
 
-    private void OnIntensityChanged(ChangeEventArgs e)
+    private async Task RefreshAsync()
     {
-        if (int.TryParse(e.Value?.ToString(), out var value))
+        if (_session is null) return;
+        var sessionId = _session.Id;
+        _error = null;
+        try
         {
-            _selectedIntensity = value;
+            var readings = await Sessions.GetEmotionsAsync(sessionId);
+            var session = await Sessions.GetByIdAsync(sessionId);
+            if (_session?.Id != sessionId) return;
+            _readings = readings;
+            _session = session;
         }
+        catch (ApiException ex) { if (_session?.Id == sessionId) _error = ex.Message; }
     }
 
-    private void SaveEmotion()
+    private async Task SaveAsync()
     {
-        _confirmationMessage = $"Registrado: {_selectedEmotionName} con intensidad {_selectedIntensity}/10.";
-        _emotionNote = string.Empty;
-
-        // Actualiza el nivel de la emoción seleccionada en el grid (visual)
-        var emotion = _emotions.FirstOrDefault(x => x.Name == _selectedEmotionName);
-        if (emotion is not null)
+        if (_busy || _session is not { IsOwner: true, Status: "Active" }) return;
+        var sessionId = _session.Id;
+        _busy = true;
+        _error = null;
+        _confirmation = null;
+        try
         {
-            emotion.Level = _selectedIntensity * 10;
+            await Sessions.AddEmotionAsync(sessionId, _emotion, _intensity / 10.0);
+            if (_session?.Id != sessionId) return;
+            _confirmation = "La lectura quedó guardada con esta sesión.";
+            await RefreshAsync();
         }
+        catch (ApiException ex) { if (_session?.Id == sessionId) _error = ex.Message; }
+        finally { _busy = false; }
     }
 
+    private static string EmotionLabel(string emotion) => emotion.Trim().ToLowerInvariant() switch
+    {
+        "joy" => "Alegría", "neutral" => "Neutral", "sadness" => "Tristeza",
+        "anger" => "Enojo", "surprise" => "Sorpresa", "confusion" => "Confusión", _ => emotion.Trim()
+    };
 }

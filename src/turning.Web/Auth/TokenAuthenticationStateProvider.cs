@@ -25,20 +25,17 @@ public sealed class TokenAuthenticationStateProvider : AuthenticationStateProvid
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
-        Console.WriteLine($"[SUE-AUTH] GetAuthenticationStateAsync llamado. _isInitialized={_isInitialized}");
         if (_isInitialized)
         {
             return _currentState;
         }
 
         await InitializeAsync();
-        Console.WriteLine($"[SUE-AUTH] Tras InitializeAsync. _isInitialized={_isInitialized}, IsAuthenticated={_currentState.User.Identity?.IsAuthenticated}");
         return _currentState;
     }
 
     public async Task InitializeAsync()
     {
-        Console.WriteLine($"[SUE-AUTH] InitializeAsync llamado. _isInitialized={_isInitialized}");
         if (_isInitialized)
         {
             return;
@@ -71,6 +68,11 @@ public sealed class TokenAuthenticationStateProvider : AuthenticationStateProvid
             }
             catch (InvalidOperationException)
             {
+                SetAuthenticationState(AnonymousState, null);
+            }
+            catch (Exception ex) when (ex is FormatException or JsonException or ArgumentOutOfRangeException)
+            {
+                await ClearPersistedTokenAsync();
                 SetAuthenticationState(AnonymousState, null);
             }
         }
@@ -146,8 +148,8 @@ public sealed class TokenAuthenticationStateProvider : AuthenticationStateProvid
     {
         var expClaim = ParseClaims(accessToken).FirstOrDefault(claim => claim.Type == "exp")?.Value;
 
-        return long.TryParse(expClaim, out var expValue)
-            && DateTimeOffset.UtcNow >= DateTimeOffset.FromUnixTimeSeconds(expValue);
+        return !long.TryParse(expClaim, out var expValue)
+            || DateTimeOffset.UtcNow >= DateTimeOffset.FromUnixTimeSeconds(expValue);
     }
 
     private static IEnumerable<Claim> ParseClaims(string accessToken)

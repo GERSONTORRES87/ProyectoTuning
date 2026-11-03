@@ -66,6 +66,19 @@ public class OpenAiErrorClassifierTests
     }
 
     [Fact]
+    public void Classify_ShouldTreatOpenRouterUpstream429AsRateLimited()
+    {
+        // Cuerpo real de OpenRouter: a diferencia de OpenAI, "code" es numérico. Leerlo
+        // como texto lanzaba una excepción y el 429 terminaba clasificado como permanente.
+        const string body = """
+            {"error":{"message":"Provider returned error","code":429,"metadata":{"raw":"google/gemma-4-31b-it:free is temporarily rate-limited upstream.","provider_name":"Google AI Studio"}}}
+            """;
+
+        OpenAiErrorClassifier.Classify(HttpStatusCode.TooManyRequests, body)
+            .Should().Be(ProviderFailureKind.RateLimited);
+    }
+
+    [Fact]
     public void Classify_ShouldNotCrashOnNonJsonBody()
     {
         OpenAiErrorClassifier.Classify(HttpStatusCode.BadGateway, "<html>502 Bad Gateway</html>")

@@ -21,9 +21,7 @@ public sealed class RegisterRequest
     public required string Password { get; init; }
 
     /// <summary>
-    /// Rol solicitado. Es obligatorio y debe ser uno de los roles conocidos del
-    /// sistema (<see cref="Turning.Domain.Common.UserRoles"/>). Que el registro
-    /// público acepte roles privilegiados es un pendiente conocido.
+    /// El registro público solo crea participantes.
     /// </summary>
-    public required string Role { get; init; }
+    public string? Role { get; init; }
 }

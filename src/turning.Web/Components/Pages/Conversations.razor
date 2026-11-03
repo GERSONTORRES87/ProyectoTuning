@@ -1,283 +1,246 @@
 @page "/conversations"
 @attribute [Authorize]
-
+@implements IAsyncDisposable
 @using System.Net
 @using turning.Web.ExperimentSessions
-
-@implements IDisposable
-@inject ExperimentSessionApiClient ExperimentSessionApiClient
-@inject NavigationManager NavigationManager
-@inject TokenAuthenticationStateProvider AuthStateProvider
+@inject ExperimentSessionApiClient Sessions
+@inject TokenAuthenticationStateProvider AuthState
+@inject NavigationManager Navigation
 
 <PageTitle>SUE — Conversación</PageTitle>
-
 <div class="sue-page">
     <header class="sue-header">
-        <p class="sue-eyebrow">· Conversación</p>
+        <p class="sue-eyebrow">Conversación</p>
         <h1 class="sue-title">Habla con SUE</h1>
-        <p class="sue-subtitle">Un espacio cálido para conversar y explorar lo que sientes.</p>
+        <p class="sue-subtitle">Una sesión, una conversación y un espacio para escuchar.</p>
     </header>
-
-    @if (_isLoading)
+    <SessionSelector SessionId="SessionId" OnSelected="SelectSessionAsync" />
+    @if (_error is not null)
+    {
+        <div class="sue-card" role="alert"><p>@_error</p></div>
+    }
+    @if (_session is not null)
     {
         <div class="sue-card">
-            <p class="sue-info-value">Cargando conversación...</p>
-        </div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_errorMessage))
-    {
-        <div class="sue-card">
-            <p class="sue-info-value" style="color: #A87B64;">@_errorMessage</p>
-        </div>
-    }
-    else if (_session is null)
-    {
-        <div class="sue-card" style="text-align: center; padding: 60px 20px;">
-            <div style="font-size: 48px; margin-bottom: 16px;">·</div>
-            <h2 class="sue-card-title">Necesitas una sesión activa</h2>
-            <p class="sue-subtitle" style="margin-bottom: 24px;">
-                Crea una sesión primero para comenzar a conversar.
-            </p>
-            <button class="btn-tierra" style="max-width: 280px; margin: 0 auto;" @onclick="GoToWorkspace">
-                ◦ Crear sesión
-            </button>
-        </div>
-    }
-    else
-    {
-        <div class="sue-card" style="padding: 0; overflow: hidden;">
-            <!-- Encabezado del chat -->
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid rgba(212, 184, 167, 0.3); flex-wrap: wrap; gap: 12px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div class="breathe" style="width: 48px; height: 48px; border-radius: 50%; background: linear-gradient(135deg, var(--salvia), var(--arcilla)); display: flex; align-items: center; justify-content: center; font-size: 22px; color: white;">
-                        ◦
-                    </div>
-                    <div>
-                        <p style="margin: 0; font-weight: 800; color: var(--barro);">SUE</p>
-                        <p style="margin: 2px 0 0; font-size: 12px; color: var(--barro-claro); display: flex; align-items: center; gap: 6px;">
-                            <span class="pulse-dot" style="width: 8px; height: 8px; border-radius: 50%; background: var(--salvia-oscura); display: inline-block;"></span>
-                            @(_isWaitingReply ? "Escribiendo..." : "Escuchando")
-                        </p>
-                    </div>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(_session.LastDetectedEmotion))
+            <p><strong>@_session.SessionCode</strong> · Estado: @_session.Status</p>
+            @if (_session.ExpiresAtUtc.HasValue && _session.Status == "Active")
+            {
+                <p role="timer">Tiempo máximo restante: @RemainingTime()</p>
+            }
+            @if (_session.Status == "Created")
+            {
+                <p>La sesión todavía no ha comenzado. El participante debe iniciarla cuando esté listo.</p>
+                @if (_session.IsOwner)
                 {
-                    <span style="padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; background: rgba(181,196,177,0.4); color: var(--salvia-oscura);">
-                        @_session.LastDetectedEmotion
-                    </span>
+                    <button class="btn-tierra" style="width:auto" disabled="@_busy" @onclick="ActivateAsync">Iniciar sesión experimental</button>
                 }
-            </div>
-
-            <!-- Mensajes -->
-            <div class="sue-chat-feed" style="padding: 24px; min-height: 400px; max-height: 520px;">
+            }
+            else if (_session.IsTerminal)
+            {
+                <p>Esta sesión ha terminado. Puedes leer la conversación, pero ya no enviar mensajes.</p>
+                @if (_session.IsOwner)
+                {
+                    <a class="btn-ghost" href="/surveys?sessionId=@_session.Id">Responder encuesta</a>
+                }
+            }
+            else if (!_session.CanConverse)
+            {
+                <p>Estás consultando esta conversación como observador.</p>
+            }
+            @if (_session.IsOwner && _session.Status == "Active")
+            {
+                <button class="btn-ghost" disabled="@_busy" @onclick="CompleteAsync">Finalizar y responder encuesta</button>
+            }
+            @if (!_session.IsTerminal)
+            {
+                <AuthorizeView Roles="Administrator">
+                    <div class="sue-form-field" style="margin-top:16px">
+                        <label for="cancel-reason" class="sue-form-label">Motivo de cancelación administrativa</label>
+                        <input id="cancel-reason" class="input-tierra" @bind="_cancelReason" />
+                        <button class="btn-ghost" disabled="@(_busy || string.IsNullOrWhiteSpace(_cancelReason))" @onclick="CancelAsync">Cancelar sesión</button>
+                    </div>
+                </AuthorizeView>
+            }
+            <p class="sue-subtitle" role="status">@(_busy ? "Procesando…" : "Los mensajes y el estado se actualizan automáticamente.")</p>
+        </div>
+        <div class="sue-card">
+            <div class="sue-chat-feed" aria-label="Mensajes de la conversación" aria-live="polite" style="padding:16px;min-height:240px;max-height:520px">
                 @if (_turns.Count == 0)
                 {
-                    <div class="sue-chat-empty">
-                        Aún no hay mensajes. Escribe el primero para comenzar tu conversación.
-                    </div>
+                    <p>Aún no hay mensajes.</p>
                 }
-                else
+                @foreach (var turn in _turns)
                 {
-                    @foreach (var turn in _turns)
-                    {
-                        <div class="@GetCss(turn)">
-                            <div class="sue-chat-meta">
-                                <span>@(turn.Sender == "Interlocutor" ? "SUE" : "Tú")</span>
-                                <span>@turn.CreatedAtUtc.ToLocalTime().ToString("HH:mm")</span>
-                            </div>
-                            <p>@turn.Message</p>
-                        </div>
-                    }
-                }
-
-                @if (_isWaitingReply)
-                {
-                    <div class="sue-chat-bubble sue-chat-sue">
-                        <div class="sue-chat-meta">
-                            <span>SUE</span>
-                            <span>escribiendo...</span>
-                        </div>
-                        <p style="letter-spacing: 4px;">● ● ●</p>
+                    <div @key="turn.Id" class="sue-chat-bubble @(IsMine(turn) ? "sue-chat-user" : "sue-chat-sue")">
+                        <div class="sue-chat-meta"><span>@SenderLabel(turn)</span><time>@turn.CreatedAtUtc.ToLocalTime().ToString("HH:mm:ss")</time></div>
+                        <p>@turn.Message</p>
                     </div>
                 }
             </div>
-
-            <!-- Input -->
-            <div style="padding: 20px 24px; border-top: 1px solid rgba(212, 184, 167, 0.3); background: var(--blanco-roto);">
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
-                    <button class="btn-ghost" style="padding: 6px 14px; font-size: 12px;" @onclick='() => UseSuggestion("¿Cómo me siento hoy?")'>
-                        ¿Cómo me siento hoy?
-                    </button>
-                    <button class="btn-ghost" style="padding: 6px 14px; font-size: 12px;" @onclick='() => UseSuggestion("Cuéntame algo que me hizo feliz.")'>
-                        Algo que me hizo feliz
-                    </button>
-                    <button class="btn-ghost" style="padding: 6px 14px; font-size: 12px;" @onclick='() => UseSuggestion("¿Qué emoción está más presente en mí?")'>
-                        ¿Qué emoción está presente?
-                    </button>
+            @if (_session.CanConverse && _session.Status == "Active")
+            {
+                <div class="sue-form-field" style="margin-top:20px">
+                    <label class="sue-form-label" for="chat-message">Tu mensaje</label>
+                    <textarea id="chat-message" class="input-tierra" rows="3" maxlength="4000" @bind="_draft" @bind:event="oninput" disabled="@_busy"></textarea>
+                    <button class="btn-tierra" style="margin-top:12px" @onclick="SendAsync" disabled="@(_busy || string.IsNullOrWhiteSpace(_draft))">@(_busy ? "Enviando…" : "Enviar")</button>
                 </div>
-
-                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <textarea class="input-tierra" rows="2" placeholder="¿Qué hay en tu corazón hoy?"
-                              style="flex: 1; min-width: 200px; resize: none;"
-                              @bind="_draftMessage"
-                              @bind:event="oninput"
-                              disabled="@_isSending"></textarea>
-                    <button class="btn-tierra" style="width: auto; padding: 12px 28px; align-self: flex-end;"
-                            @onclick="SendAsync" disabled="@_isSending">
-                        @(_isSending ? "..." : "· Enviar")
-                    </button>
-                </div>
-            </div>
+            }
         </div>
     }
 </div>
 
 @code {
+    [SupplyParameterFromQuery] public Guid? SessionId { get; set; }
     private ExperimentSessionSnapshotDto? _session;
-    private List<ConversationTurnSnapshotDto> _turns = new();
-    private bool _isLoading = true;
-    private bool _isSending;
-    private bool _isWaitingReply;
-    private string? _errorMessage;
-    private string _draftMessage = string.Empty;
+    private List<ConversationTurnSnapshotDto> _turns = [];
+    private string _draft = "";
+    private string _cancelReason = "";
+    private string? _error;
+    private bool _busy;
+    private CancellationTokenSource? _lifetime;
+    private Task? _poll;
+    private readonly SemaphoreSlim _requests = new(1, 1);
 
-    private Timer? _pollTimer;
-
-    protected override async Task OnInitializedAsync()
+    private async Task SelectSessionAsync(ExperimentSessionSnapshotDto? session)
     {
-        await LoadAsync();
-
-        // En condición Human la respuesta llega cuando el interlocutor la escribe, no al enviar.
-        if (_session?.Condition == "Human")
-        {
-            _pollTimer = new Timer(_ => InvokeAsync(PollTurnsAsync), null, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(4));
-        }
-    }
-
-    private async Task PollTurnsAsync()
-    {
-        if (_session is null || _isSending || _isWaitingReply) return;
-
+        await StopPollingAsync();
+        _session = session;
+        _turns.Clear();
+        _draft = "";
+        _error = null;
+        if (session is null) return;
+        _busy = true;
+        _lifetime = new CancellationTokenSource();
         try
         {
-            _turns = new List<ConversationTurnSnapshotDto>(await ExperimentSessionApiClient.GetConversationTurnsAsync(_session.Id));
-            StateHasChanged();
+            await RefreshAsync(_lifetime.Token);
+            if (!_session!.IsTerminal) _poll = PollAsync(_lifetime.Token);
         }
-        catch (ApiException)
-        {
-            // El siguiente ciclo reintenta; el error visible queda para las acciones del usuario.
-        }
+        catch (ApiException ex) { await HandleErrorAsync(ex); }
+        catch (OperationCanceledException) { }
+        finally { _busy = false; }
     }
 
-    public void Dispose() => _pollTimer?.Dispose();
-
-    private async Task LoadAsync()
+    private async Task PollAsync(CancellationToken ct)
     {
-        _isLoading = true;
-        _errorMessage = null;
-
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         try
         {
-            _session = await ExperimentSessionApiClient.GetLatestAsync();
-
-            if (_session is not null)
+            while (await timer.WaitForNextTickAsync(ct))
             {
-                var turns = await ExperimentSessionApiClient.GetConversationTurnsAsync(_session.Id);
-                _turns = new List<ConversationTurnSnapshotDto>(turns);
+                if (_busy) continue;
+                try
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await _requests.WaitAsync(ct);
+                        try { if (!_busy) await RefreshAsync(ct); }
+                        finally { _requests.Release(); }
+                        StateHasChanged();
+                    });
+                    if (_session?.IsTerminal == true) break;
+                }
+                catch (ApiException ex)
+                {
+                    await InvokeAsync(async () => { await HandleErrorAsync(ex); StateHasChanged(); });
+                    if (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound) break;
+                }
             }
         }
-        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        if (_session is null) return;
+        var id = _session.Id;
+        var snapshot = await Sessions.GetByIdAsync(id, ct);
+        var cursor = _turns.Count == 0 ? 0 : _turns.Max(t => t.SequenceNumber);
+        IReadOnlyList<ConversationTurnSnapshotDto> turns;
+        do
         {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fconversations", replace: true);
-        }
-        catch (ApiException exception)
-        {
-            _errorMessage = exception.Message;
-        }
-        finally
-        {
-            _isLoading = false;
-        }
+            turns = await Sessions.GetConversationTurnsAsync(id, ct, cursor);
+            if (ct.IsCancellationRequested || _session?.Id != id) return;
+            foreach (var turn in turns)
+                if (!_turns.Any(t => t.Id == turn.Id)) _turns.Add(turn);
+            if (turns.Count > 0) cursor = turns.Max(t => t.SequenceNumber);
+        } while (turns.Count == 200);
+        _turns.Sort((left, right) => left.SequenceNumber.CompareTo(right.SequenceNumber));
+        _session = snapshot;
     }
 
     private async Task SendAsync()
-{
-    if (_session is null || string.IsNullOrWhiteSpace(_draftMessage))
     {
-        return;
-    }
-
-    _isSending = true;
-    _errorMessage = null;
-
-    var messageToSend = _draftMessage.Trim();
-    var turnsBefore = _turns.Count;
-
-    // ✅ Optimista: mostrar el mensaje del usuario INMEDIATAMENTE
-    _turns.Add(new ConversationTurnSnapshotDto
-    {
-        Id = Guid.NewGuid(),
-        SessionId = _session.Id,
-        SequenceNumber = turnsBefore + 1,
-        Sender = "Participant",
-        Message = messageToSend,
-        CreatedAtUtc = DateTime.UtcNow
-    });
-
-    _draftMessage = string.Empty;
-    _isSending = false;
-    _isWaitingReply = true;
-    StateHasChanged();
-
-    try
-    {
-        // Enviamos el mensaje al backend (esto puede tardar por el delay humano)
-        await ExperimentSessionApiClient.AddConversationTurnAsync(_session.Id, new AddConversationTurnRequestDto
+        if (_busy || _session is null || string.IsNullOrWhiteSpace(_draft)) return;
+        _busy = true;
+        _error = null;
+        var ct = _lifetime!.Token;
+        var locked = false;
+        try
         {
-            Sender = "Participant",
-            Message = messageToSend
-        });
-
-        // Una vez que el backend terminó, recargamos para traer ambos turnos reales
-        var turns = await ExperimentSessionApiClient.GetConversationTurnsAsync(_session.Id);
-        _turns = new List<ConversationTurnSnapshotDto>(turns);
-        _session = await ExperimentSessionApiClient.GetLatestAsync();
-
-        _isWaitingReply = false;
-        StateHasChanged();
-    }
-    catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
-    {
-        await AuthStateProvider.SignOutAsync();
-        NavigationManager.NavigateTo("/login?returnUrl=%2Fconversations", replace: true);
-    }
-    catch (ApiException exception)
-    {
-        _errorMessage = exception.Message;
-        _isWaitingReply = false;
-    }
-    finally
-    {
-        _isSending = false;
-        _isWaitingReply = false;
-    }
-}
-
-    private void UseSuggestion(string text)
-    {
-        _draftMessage = text;
+            await _requests.WaitAsync(ct);
+            locked = true;
+            await Sessions.AddConversationTurnAsync(_session.Id, new() { Message = _draft.Trim() }, ct);
+            _draft = "";
+            await RefreshAsync(ct);
+        }
+        catch (ApiException ex) { await HandleErrorAsync(ex); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        finally { if (locked) _requests.Release(); _busy = false; }
     }
 
-    private void GoToWorkspace()
+    private Task ActivateAsync() => TransitionAsync(false);
+    private Task CompleteAsync() => TransitionAsync(true);
+    private async Task CancelAsync()
     {
-        NavigationManager.NavigateTo("/workspace");
+        if (_busy || _session is null || string.IsNullOrWhiteSpace(_cancelReason)) return;
+        _busy = true; _error = null;
+        await _requests.WaitAsync();
+        try { _session = await Sessions.CancelAsync(_session.Id, _cancelReason.Trim()); }
+        catch (ApiException ex) { await HandleErrorAsync(ex); }
+        finally { _requests.Release(); _busy = false; }
+    }
+    private async Task TransitionAsync(bool complete)
+    {
+        if (_busy || _session is null) return;
+        _busy = true;
+        _error = null;
+        await _requests.WaitAsync();
+        try
+        {
+            _session = complete ? await Sessions.CompleteAsync(_session.Id) : await Sessions.ActivateAsync(_session.Id);
+            if (complete) Navigation.NavigateTo($"/surveys?sessionId={_session.Id}");
+        }
+        catch (ApiException ex) { await HandleErrorAsync(ex); }
+        finally { _requests.Release(); _busy = false; }
     }
 
-    private static string GetCss(ConversationTurnSnapshotDto turn)
+    private async Task HandleErrorAsync(ApiException ex)
     {
-        return string.Equals(turn.Sender, "Interlocutor", StringComparison.OrdinalIgnoreCase)
-            ? "sue-chat-bubble sue-chat-sue"
-            : "sue-chat-bubble sue-chat-user";
+        _error = ex.Message;
+        if (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            await AuthState.SignOutAsync();
+            Navigation.NavigateTo("/login", replace: true);
+        }
     }
+
+    private bool IsMine(ConversationTurnSnapshotDto turn) => _session?.ParticipationRole switch
+    {
+        "Owner" => turn.Sender == "Participant",
+        "Interlocutor" => turn.Sender == "Interlocutor",
+        _ => false
+    };
+    private string SenderLabel(ConversationTurnSnapshotDto turn) => IsMine(turn) ? "Tú" : turn.Sender == "Participant" ? "Participante" : "SUE";
+    private string RemainingTime() => TimeSpan.FromSeconds(Math.Max(0, (_session!.ExpiresAtUtc!.Value - DateTime.UtcNow).TotalSeconds)).ToString(@"mm\:ss");
+    private async Task StopPollingAsync()
+    {
+        if (_lifetime is null) return;
+        await _lifetime.CancelAsync();
+        if (_poll is not null) await _poll;
+        _lifetime.Dispose();
+        _lifetime = null;
+        _poll = null;
+    }
+    public async ValueTask DisposeAsync() => await StopPollingAsync();
 }

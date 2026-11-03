@@ -35,5 +35,7 @@ public interface IExperimentSessionRepository
     /// Cuenta las sesiones Human que todavia esperan interlocutor.
     /// </summary>
     Task<int> CountAwaitingInterlocutorAsync(CancellationToken ct = default);
+    Task ReloadAsync(ExperimentSession session, CancellationToken ct = default);
+    Task AddAuditAsync(SessionAuditEntry entry, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

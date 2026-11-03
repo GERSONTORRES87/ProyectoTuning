@@ -45,3 +45,36 @@ Desktop.ini-e
 # graphify (grafo de conocimiento generado)
 graphify-out/
 .graphify_*
+
+# Codex-Claude handoff protocol
+# Keep these local - they may contain project-specific private context.
+/AI_HANDOFF.md
+/NEXT_TURN.md
+/USER_REQUEST.md
+/HANDOFF_LOOP.log
+/AI_SEQUENCE.md
+/REVIEW.jsonl
+/REVIEW_LAST.md
+/MASTER.jsonl
+/MASTER_LAST.md
+/IMPLEMENTER.jsonl
+/IMPLEMENTER_LAST.md
+/IMPLEMENTER_COMMAND.md
+/CODEX_REVIEW.jsonl
+/CODEX_REVIEW_LAST.md
+/CODEX_MASTER.jsonl
+/CODEX_MASTER_LAST.md
+/CLAUDE_IMPLEMENTER.jsonl
+/CLAUDE_IMPLEMENTER_LAST.md
+/CLAUDE_IMPLEMENTER_COMMAND.md
+/IMPLEMENTER_CLI_BRIEF.md
+/.ai/handoff-history/
+/HANDOFF_RUN.json
+/HANDOFF_BACKGROUND.json
+/HANDOFF_BACKGROUND.log
+/HANDOFF_UI.json
+/HANDOFF_UI_WINDOW.json
+
+# Agent MCP configuration - holds API keys and access tokens in plain text.
+/.mcp.json
+/.codex/config.toml

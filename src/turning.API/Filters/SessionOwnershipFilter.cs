@@ -83,7 +83,16 @@ public sealed class SessionOwnershipFilter : IAsyncAuthorizationFilter
             ? SessionAccessLevel.Interlocutor
             : SessionAccessLevel.Owner;
 
-        if (level < minimumLevel)
+        // Privileged es el nivel mas alto y por eso supera el minimo Owner de toda ruta, pero
+        // eso solo vale para observar: un Researcher/Administrator ajeno no escribe en el
+        // experimento de otro participante salvo que la ruta lo declare y su servicio
+        // compruebe la participacion real.
+        var observesOnly = level == SessionAccessLevel.Privileged
+            && !HttpMethods.IsGet(context.HttpContext.Request.Method)
+            && !HttpMethods.IsHead(context.HttpContext.Request.Method)
+            && !context.ActionDescriptor.EndpointMetadata.OfType<AllowPrivilegedSessionWriteAttribute>().Any();
+
+        if (level < minimumLevel || observesOnly)
         {
             context.Result = new NotFoundObjectResult(new { error = "SESSION_NOT_FOUND" });
             return;

@@ -29,6 +29,18 @@ builder.Services.AddJwtAuthentication(builder.Configuration, builder.Environment
 var aiLogger = new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger("Turning.API.Ai");
 builder.Services.AddAiTextGeneration(builder.Configuration, builder.Environment, aiLogger);
 
+if (!builder.Environment.IsDevelopment())
+{
+    // Sin correo la plataforma sigue funcionando; solo el restablecimiento queda sin entregar.
+    var emailLogger = new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger("Turning.API.Email");
+    var emailProblems = (builder.Configuration.GetSection(Turning.Infrastructure.Email.EmailOptions.SectionName)
+            .Get<Turning.Infrastructure.Email.EmailOptions>() ?? new()).Validate()
+        .Concat((builder.Configuration.GetSection(Turning.Application.Features.Auth.PasswordResetOptions.SectionName)
+            .Get<Turning.Application.Features.Auth.PasswordResetOptions>() ?? new()).Validate());
+    foreach (var problem in emailProblems)
+        emailLogger.LogWarning("Restablecimiento de contraseña sin correo: {Problema}", problem);
+}
+
 builder.Services.AddAuthorization();
 
 // Agregar controllers y Swagger
@@ -85,7 +97,10 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<TurningDbContext>();
     dbContext.Database.Migrate();
-    await Turning.Infrastructure.Persistence.TurningDbSeeder.SeedAsync(dbContext);
+    await TurningDbSeeder.SeedAsync(
+        dbContext,
+        scope.ServiceProvider.GetRequiredService<Turning.Application.Interfaces.IPasswordHasherService>(),
+        app.Environment.IsDevelopment());
 }
 
 // Configurar middleware

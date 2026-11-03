@@ -1,146 +1,73 @@
 @page "/sessions"
-@attribute [Authorize(Roles = "Administrator,Researcher")]
-
-@using System.Net
+@attribute [Authorize]
 @using turning.Web.ExperimentSessions
+@inject AuthApiClient Auth
+@inject ExperimentSessionApiClient SessionsApi
+@inject NavigationManager Navigation
 
-@inject ExperimentSessionApiClient ExperimentSessionApiClient
-@inject NavigationManager NavigationManager
-@inject TokenAuthenticationStateProvider AuthStateProvider
-
-<PageTitle>SUE — Sesiones de Experiencia</PageTitle>
-
+<PageTitle>SUE — Sesiones</PageTitle>
 <div class="sue-page">
-    <header class="sue-header" style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px;">
-        <div>
-            <p class="sue-eyebrow">— Experiencias</p>
-            <h1 class="sue-title">Sesiones de Experiencia</h1>
-            <p class="sue-subtitle">Crea, explora y reflexiona sobre tus sesiones emocionales.</p>
-        </div>
-        <button class="btn-tierra" style="width: auto; padding: 12px 24px;" @onclick="GoToWorkspace">
-            ◦ Nueva Sesión
-        </button>
-    </header>
-
-    @if (_isLoading)
-    {
-        <div class="sue-card">
-            <p class="sue-info-value">Cargando sesiones...</p>
-        </div>
-    }
-    else if (!string.IsNullOrWhiteSpace(_errorMessage))
-    {
-        <div class="sue-card">
-            <p class="sue-info-value" style="color: #A87B64;">@_errorMessage</p>
-        </div>
-    }
-    else if (_session is null)
-    {
-        <div class="sue-card" style="text-align: center; padding: 60px 20px;">
-            <div style="font-size: 48px; margin-bottom: 16px;">◦</div>
-            <h2 class="sue-card-title">Aún no tienes sesiones</h2>
-            <p class="sue-subtitle" style="margin-bottom: 24px;">
-                Comienza tu primera experiencia emocional en el panel principal.
-            </p>
-            <button class="btn-tierra" style="max-width: 280px; margin: 0 auto;" @onclick="GoToWorkspace">
-                ◦ Crear mi primera sesión
-            </button>
-        </div>
-    }
-    else
-    {
-        <div class="sue-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
-                <div>
-                    <p class="sue-info-label">Código de sesión</p>
-                    <h2 class="sue-card-title" style="margin: 4px 0 0;">@_session.SessionCode</h2>
-                </div>
-                <span style="padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 800; 
-                             background: @(_session.Status == "Active" ? "rgba(181,196,177,0.4)" : "var(--arena-media)");
-                             color: @(_session.Status == "Active" ? "var(--salvia-oscura)" : "var(--terracota-oscura)");">
-                    • @_session.Status
-                </span>
+    <header class="sue-header"><p class="sue-eyebrow">Experimento</p><h1 class="sue-title">Sesiones de experiencia</h1><p class="sue-subtitle">Crea una sesión o usa el código que te compartió el equipo para participar como interlocutor.</p></header>
+    @if (_error is not null) { <div class="sue-card" role="alert">@_error</div> }
+    <div class="sue-two-cols">
+        <div class="sue-card"><h2 class="sue-card-title">Nueva sesión</h2><p>El sistema asigna la condición experimental. Puedes iniciarla cuando estés listo.</p><button class="btn-tierra" disabled="@_busy" @onclick="CreateAsync">Crear sesión experimental</button></div>
+        <div class="sue-card"><h2 class="sue-card-title">Unirme como interlocutor</h2><label class="sue-form-label" for="join-code">Código de invitación</label><input id="join-code" class="input-tierra" placeholder="EXP-XXXXXXXX" maxlength="12" @bind="_code" /><button class="btn-ghost" style="margin-top:16px" disabled="@(_busy || string.IsNullOrWhiteSpace(_code))" @onclick="JoinAsync">Unirme a la conversación</button></div>
+    </div>
+    <div class="sue-card">
+        <h2 class="sue-card-title">Mis sesiones</h2>
+        @if (_loading) { <p role="status">Cargando sesiones...</p> }
+        else if (_own.Count == 0) { <p>Aún no has creado sesiones.</p> }
+        @foreach (var session in _own)
+        {
+            <div style="padding:16px 0;border-bottom:1px solid var(--arena-media)">
+                <strong>@session.SessionCode</strong> · @session.Status · @session.CreatedAtUtc.ToLocalTime().ToString("g")
+                <div style="display:flex;gap:16px;margin-top:8px"><a href="/conversations?sessionId=@session.Id">Abrir sesión</a>@if (session.IsTerminal) { <a href="/surveys?sessionId=@session.Id">Encuesta</a><a href="/results?sessionId=@session.Id">Resultados</a> }</div>
             </div>
-
-            <div class="sue-info-grid">
-                <div>
-                    <p class="sue-info-label">Condición</p>
-                    <p class="sue-info-value">@_session.Condition</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Emoción detectada</p>
-                    <p class="sue-info-value">@(_session.LastDetectedEmotion ?? "—")</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Mensajes</p>
-                    <p class="sue-info-value">@_session.ConversationTurnCount</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Muestras emocionales</p>
-                    <p class="sue-info-value">@_session.EmotionSampleCount</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Estado del avatar</p>
-                    <p class="sue-info-value">@_session.AvatarState</p>
-                </div>
-                <div>
-                    <p class="sue-info-label">Creada</p>
-                    <p class="sue-info-value">@_session.CreatedAtUtc.ToLocalTime().ToString("g")</p>
-                </div>
-            </div>
-
-            <div style="margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap;">
-                <button class="btn-tierra" style="width: auto; padding: 12px 24px;" @onclick="GoToWorkspace">
-                    Ver detalles
-                </button>
-                <button class="btn-ghost" style="width: auto;" @onclick="GoToWorkspace">
-                    Continuar sesión
-                </button>
-            </div>
+        }
+        <div style="display:flex;gap:12px;margin-top:16px"><button class="btn-ghost" disabled="@(_busy || _page == 1)" @onclick="PreviousAsync">Anterior</button><span>Página @_page · @_total sesiones</span><button class="btn-ghost" disabled="@(_busy || _page * 20 >= _total)" @onclick="NextAsync">Siguiente</button></div>
+    </div>
+    <AuthorizeView Roles="Researcher,Administrator">
+        <div class="sue-card">
+            <h2 class="sue-card-title">Sesiones que esperan interlocutor</h2><button class="btn-ghost" disabled="@_busy" @onclick="LoadQueueAsync">Actualizar cola</button>
+            @if (_queue.Count == 0) { <p>No hay sesiones pendientes en esta página.</p> }
+            @foreach (var session in _queue)
+            {
+                <div style="padding:16px 0;border-bottom:1px solid var(--arena-media)"><strong>@session.SessionCode</strong> · @session.Status <a href="/conversations?sessionId=@session.Id">Observar</a><button class="btn-ghost" disabled="@_busy" @onclick="() => JoinCodeAsync(session.SessionCode)">Tomar conversación</button><button class="btn-ghost" disabled="@(_busy || !Guid.TryParse(_interlocutorId, out _))" @onclick="() => AssignAsync(session.Id)">Asignar usuario</button></div>
+            }
+            <label class="sue-form-label" for="interlocutor-id">Identificador del usuario que será interlocutor</label><input id="interlocutor-id" class="input-tierra" @bind="_interlocutorId" placeholder="GUID del usuario" />
+            <div style="display:flex;gap:12px;margin-top:16px"><button class="btn-ghost" disabled="@(_busy || _queuePage == 1)" @onclick="PreviousQueueAsync">Anterior</button><span>Página @_queuePage · @_queueTotal pendientes</span><button class="btn-ghost" disabled="@(_busy || _queuePage * 20 >= _queueTotal)" @onclick="NextQueueAsync">Siguiente</button></div>
         </div>
-
-        <div class="sue-card" style="background: var(--arena-media); text-align: center; padding: 32px;">
-            <p class="sue-info-value">Próximamente: historial completo de sesiones, filtros y comparativas.</p>
-        </div>
-    }
+    </AuthorizeView>
 </div>
-
 @code {
-    private ExperimentSessionSnapshotDto? _session;
-    private bool _isLoading = true;
-    private string? _errorMessage;
-
+    private AuthenticatedUserDto? _user;
+    private List<ExperimentSessionSnapshotDto> _own = [], _queue = [];
+    private string _code = "", _interlocutorId = "";
+    private string? _error;
+    private bool _busy, _loading = true;
+    private int _page = 1, _total, _queuePage = 1, _queueTotal;
     protected override async Task OnInitializedAsync()
     {
-        await LoadAsync();
+        await RunAsync(async () => { _user = await Auth.GetCurrentUserAsync(); await LoadOwnAsync(); if (_user.Role is "Researcher" or "Administrator") await RefreshQueueAsync(); });
+        _loading = false;
     }
-
-    private async Task LoadAsync()
+    private async Task LoadOwnAsync() { var result = await SessionsApi.ListOwnAsync(_user!.Id, _page); _own = result.Sessions; _total = result.Total; }
+    private async Task RefreshQueueAsync() { var result = await SessionsApi.ListAwaitingAsync(_queuePage); _queue = result.Items; _queueTotal = result.Total; }
+    private Task CreateAsync() => RunAsync(async () => { var session = await SessionsApi.CreateBootstrapAsync(new()); Navigation.NavigateTo($"/conversations?sessionId={session.Id}"); });
+    private Task JoinAsync() => JoinCodeAsync(_code);
+    private Task JoinCodeAsync(string code) => RunAsync(async () => { var session = await SessionsApi.JoinAsync(code.Trim()); Navigation.NavigateTo($"/conversations?sessionId={session.Id}"); });
+    private Task AssignAsync(Guid sessionId) => RunAsync(async () => { if (Guid.TryParse(_interlocutorId, out var userId)) { await SessionsApi.AssignAsync(sessionId, userId); await RefreshQueueAsync(); } });
+    private Task LoadQueueAsync() => RunAsync(RefreshQueueAsync);
+    private Task PreviousAsync() => RunAsync(async () => { _page--; await LoadOwnAsync(); });
+    private Task NextAsync() => RunAsync(async () => { _page++; await LoadOwnAsync(); });
+    private Task PreviousQueueAsync() => RunAsync(async () => { _queuePage--; await RefreshQueueAsync(); });
+    private Task NextQueueAsync() => RunAsync(async () => { _queuePage++; await RefreshQueueAsync(); });
+    private async Task RunAsync(Func<Task> action)
     {
-        _isLoading = true;
-        _errorMessage = null;
-
-        try
-        {
-            _session = await ExperimentSessionApiClient.GetLatestAsync();
-        }
-        catch (ApiException exception) when (exception.StatusCode == HttpStatusCode.Unauthorized)
-        {
-            await AuthStateProvider.SignOutAsync();
-            NavigationManager.NavigateTo("/login?returnUrl=%2Fsessions", replace: true);
-        }
-        catch (ApiException exception)
-        {
-            _errorMessage = exception.Message;
-        }
-        finally
-        {
-            _isLoading = false;
-        }
-    }
-
-    private void GoToWorkspace()
-    {
-        NavigationManager.NavigateTo("/workspace");
+        if (_busy) return;
+        _busy = true; _error = null;
+        try { await action(); }
+        catch (ApiException ex) { _error = ex.Message; if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized) Navigation.NavigateTo("/login"); }
+        finally { _busy = false; }
     }
 }

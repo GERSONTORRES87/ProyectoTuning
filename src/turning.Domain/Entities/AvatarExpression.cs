@@ -60,7 +60,10 @@ public sealed class AvatarExpression : BaseEntity
         ArgumentNullException.ThrowIfNull(r);
 
         var name = MapExpressionName(r.Emotion);
-        var fallback = name == "Neutral" && !string.Equals(r.Emotion, EmotionLabel.Neutral, StringComparison.OrdinalIgnoreCase);
+        // Una lectura degradada (proveedor caido o texto sin senal) llega como Neutral con la
+        // intensidad de respaldo: sin esta marca el avatar la presentaria como una medicion.
+        var fallback = r.IsDegraded
+            || (name == "Neutral" && !string.Equals(r.Emotion, EmotionLabel.Neutral, StringComparison.OrdinalIgnoreCase));
 
         return new()
         {

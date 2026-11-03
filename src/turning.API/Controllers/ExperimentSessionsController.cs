@@ -54,7 +54,7 @@ public sealed class ExperimentSessionsController : ControllerBase
             return Unauthorized();
         }
 
-        var snapshot = await _experimentSessionService.CreateBootstrapSessionAsync(userId, request, cancellationToken);
+        var snapshot = await _experimentSessionService.CreateBootstrapSessionAsync(userId, request, cancellationToken, IsPrivileged());
         return Ok(snapshot);
     }
 
@@ -80,7 +80,7 @@ public sealed class ExperimentSessionsController : ControllerBase
             return Unauthorized();
         }
 
-        var snapshot = await _experimentSessionService.GetLatestSessionAsync(userId, cancellationToken);
+        var snapshot = await _experimentSessionService.GetLatestSessionAsync(userId, cancellationToken, IsPrivileged());
         return snapshot is null ? NotFound() : Ok(snapshot);
     }
 
@@ -91,4 +91,5 @@ public sealed class ExperimentSessionsController : ControllerBase
 
         return Guid.TryParse(userIdClaim, out userId);
     }
+    private bool IsPrivileged() => User.IsInRole("Researcher") || User.IsInRole("Administrator");
 }

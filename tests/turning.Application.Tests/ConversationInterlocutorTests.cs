@@ -39,10 +39,13 @@ public class ConversationInterlocutorTests
     private ConversationTurnService CreateService() =>
         new(_turns, _sessions, _orchestrator, _events, _emotions, _readings, Options.Create(new SessionOptions()));
 
-    private ExperimentSession ArrangePairedSession(Guid ownerId, Guid interlocutorId)
+    private ExperimentSession ArrangePairedSession(Guid ownerId, Guid interlocutorId, bool started = true)
     {
         var session = ExperimentSession.Create(ownerId, ExperimentalCondition.Human);
         session.AssignInterlocutor(interlocutorId);
+
+        // Solo el dueño inicia la sesión: el interlocutor necesita una sesión ya Active.
+        if (started) session.Activate(TimeSpan.FromMinutes(5));
 
         _sessions.GetByIdAsync(session.Id, Arg.Any<CancellationToken>()).Returns(session);
         _turns.ListBySessionAsync(session.Id, Arg.Any<CancellationToken>()).Returns([]);
@@ -62,7 +65,7 @@ public class ConversationInterlocutorTests
         });
 
         result.Sender.Should().Be("Participant");
-        result.Source.Should().Be(ConversationTurnResult.SourceNone);
+        result.Source.Should().Be(ConversationTurnResult.SourcePending);
     }
 
     [Fact]
@@ -142,6 +145,67 @@ public class ConversationInterlocutorTests
         await _orchestrator.Received(1).ResolveReplyAsync(
             Arg.Any<ExperimentSession>(), Arg.Any<ConversationTurn>(), Arg.Any<IReadOnlyList<ConversationTurn>>(),
             Arg.Any<EmotionContext?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldRejectTheInterlocutor_BeforeTheOwnerStartsTheSession()
+    {
+        var interlocutorId = Guid.NewGuid();
+        var session = ArrangePairedSession(Guid.NewGuid(), interlocutorId, started: false);
+
+        var act = async () => await CreateService().AddAsync(interlocutorId, session.Id, new AddConversationTurnRequest
+        {
+            Message = "Intento abrir la sesión yo."
+        });
+
+        await act.Should().ThrowAsync<TurningApplicationException>()
+            .Where(ex => ex.Code == "SESSION_NOT_STARTED");
+        session.Status.Should().Be(ExperimentSessionStatus.Created);
+        session.ConversationTurnCount.Should().Be(0);
+        await _turns.DidNotReceive().AddAsync(Arg.Any<ConversationTurn>(), Arg.Any<CancellationToken>());
+        await _readings.DidNotReceive().AddAsync(
+            Arg.Any<EmotionReading>(), Arg.Any<AvatarExpression>(), Arg.Any<CancellationToken>());
+        _events.DidNotReceive().Publish(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<object>());
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldLetTheOwnerStartTheSession_WithTheFirstTurn()
+    {
+        var ownerId = Guid.NewGuid();
+        var session = ArrangePairedSession(ownerId, Guid.NewGuid(), started: false);
+
+        await CreateService().AddAsync(ownerId, session.Id, new AddConversationTurnRequest { Message = "Empiezo yo." });
+
+        session.Status.Should().Be(ExperimentSessionStatus.Active);
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldKeepThePrivilegedFlagForProjectionOnly_WhenTheCallerIsTheAssignedInterlocutor()
+    {
+        // Un Researcher/Administrator asignado como interlocutor escribe como interlocutor,
+        // no como observador: el flag privilegiado solo cambia qué ve, no qué papel tiene.
+        var interlocutorId = Guid.NewGuid();
+        var session = ArrangePairedSession(Guid.NewGuid(), interlocutorId);
+
+        var result = await CreateService().AddAsync(interlocutorId, session.Id,
+            new AddConversationTurnRequest { Message = "Respondo siendo investigador." },
+            isPrivilegedRequester: true);
+
+        result.Sender.Should().Be("Interlocutor");
+    }
+
+    [Fact]
+    public async Task AddAsync_ShouldRejectAnUnassignedPrivilegedObserver_WithoutPersistingAnything()
+    {
+        var session = ArrangePairedSession(Guid.NewGuid(), Guid.NewGuid());
+
+        var act = async () => await CreateService().AddAsync(Guid.NewGuid(), session.Id,
+            new AddConversationTurnRequest { Message = "Observador privilegiado." },
+            isPrivilegedRequester: true);
+
+        await act.Should().ThrowAsync<NotFoundException>();
+        await _turns.DidNotReceive().AddAsync(Arg.Any<ConversationTurn>(), Arg.Any<CancellationToken>());
+        _events.DidNotReceive().Publish(Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<object>());
     }
 
     [Fact]

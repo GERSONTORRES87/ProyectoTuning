@@ -16,17 +16,21 @@ public static class ExperimentSessionSnapshotMapper
     /// <summary>
     /// Construye el contrato público de una sesión.
     /// </summary>
-    public static ExperimentSessionSnapshot ToSnapshot(ExperimentSession s) => new()
+    public static ExperimentSessionSnapshot ToSnapshot(ExperimentSession s, Guid? requestingUserId = null, bool isPrivilegedRequester = true)
     {
+        var hideCondition = requestingUserId == s.OwnerUserId && !isPrivilegedRequester;
+        return new()
+        {
+        ParticipationRole = requestingUserId == s.OwnerUserId ? "Owner" : s.IsInterlocutor(requestingUserId ?? Guid.Empty) ? "Interlocutor" : "Observer",
         Id = s.Id,
         SessionCode = s.SessionCode,
-        Condition = s.Condition.ToString(),
+        Condition = hideCondition ? "Hidden" : s.Condition.ToString(),
         Status = s.Status.ToString(),
         AvatarState = s.AvatarState,
-        InterlocutorUserId = s.InterlocutorUserId,
-        HasInterlocutor = s.InterlocutorUserId is not null,
-        InterlocutorJoinedAtUtc = s.InterlocutorJoinedAtUtc,
-        IsAwaitingInterlocutor = s.IsAwaitingInterlocutor,
+        InterlocutorUserId = hideCondition ? null : s.InterlocutorUserId,
+        HasInterlocutor = !hideCondition && s.InterlocutorUserId is not null,
+        InterlocutorJoinedAtUtc = hideCondition ? null : s.InterlocutorJoinedAtUtc,
+        IsAwaitingInterlocutor = !hideCondition && s.IsAwaitingInterlocutor,
         ConversationTurnCount = s.ConversationTurnCount,
         EmotionSampleCount = s.EmotionSampleCount,
         LastDetectedEmotion = s.LastDetectedEmotion,
@@ -40,5 +44,6 @@ public static class ExperimentSessionSnapshotMapper
         ConversationStage = s.ConversationTurnCount == 0 ? "ready-for-first-turn" : "in-progress",
         EmotionStage = s.EmotionSampleCount == 0 ? "ready-for-first-signal" : "monitoring",
         AvatarStage = s.AvatarState
-    };
+        };
+    }
 }

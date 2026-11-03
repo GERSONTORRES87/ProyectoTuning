@@ -1,8 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Turning.Application.Features.Auth;
+using Turning.Application.Interfaces;
 
 namespace Turning.API.Extensions;
 
@@ -81,6 +84,32 @@ public static class JwtAuthenticationExtensions
                     ValidAudience = options.Audience,
                     IssuerSigningKey = signingKey,
                     ClockSkew = TimeSpan.FromMinutes(1)
+                };
+                bearer.Events = new JwtBearerEvents
+                {
+                    OnTokenValidated = async context =>
+                    {
+                        var claim = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sub);
+                        if (!Guid.TryParse(claim, out var userId) || userId == Guid.Empty)
+                        {
+                            context.Fail("El token no identifica un usuario válido.");
+                            return;
+                        }
+                        var users = context.HttpContext.RequestServices.GetRequiredService<IUserAccountRepository>();
+                        var user = await users.GetByIdAsync(userId, context.HttpContext.RequestAborted);
+                        if (user is null || context.Principal?.IsInRole(user.Role) != true)
+                        {
+                            context.Fail("El usuario o su rol cambió. Inicia sesión de nuevo.");
+                            return;
+                        }
+
+                        // shortcut: un token sin huella (emitido antes de este cambio) se acepta hasta que expire;
+                        // pasados Jwt:ExpirationMinutes desde el despliegue todos la llevan.
+                        var stamp = context.Principal?.FindFirstValue(PasswordStamp.ClaimType);
+                        if (stamp is not null && stamp != PasswordStamp.Of(user))
+                            context.Fail("La contraseña cambió. Inicia sesión de nuevo.");
+                    }
                 };
             });
 

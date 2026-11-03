@@ -3,10 +3,7 @@ namespace Turning.Domain.Common;
 /// <summary>
 /// Roles conocidos del sistema.
 ///
-/// Pendiente de acuerdo con el equipo: hoy el registro público concede cualquiera
-/// de estos tres, así que un usuario puede auto-asignarse Researcher o
-/// Administrator y saltarse el aislamiento por propietario. Restringirlo a
-/// Participant exige antes una vía de asignación administrativa, que no existe.
+/// El registro público crea Participant; los privilegios los asigna un administrador.
 /// </summary>
 public static class UserRoles
 {

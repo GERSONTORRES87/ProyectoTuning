@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Turning.Application.Features.AI;
 using Turning.Application.Interfaces;
 using Turning.Infrastructure.AI;
@@ -44,6 +45,13 @@ public static class AiConfigurationExtensions
         var options = new AiOptions();
         configuration.GetSection(AiOptions.SectionName).Bind(options);
 
+        // El binder anade a una lista con valores por defecto en vez de reemplazarla:
+        // ["openrouter","rule-based"] acababa siendo ["openai","openrouter","rule-based","openrouter","rule-based"]
+        // y no habia forma de saltarse o reordenar un proveedor desde la configuracion.
+        var configuredOrder = configuration.GetSection($"{AiOptions.SectionName}:ProviderOrder").Get<string[]>();
+        if (configuredOrder is { Length: > 0 })
+            options.ProviderOrder = configuredOrder;
+
         var errors = options.Validate();
         if (errors.Count > 0)
         {
@@ -62,7 +70,10 @@ public static class AiConfigurationExtensions
             options = new AiOptions();
         }
 
-        services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
+        // El router lee IOptions<AiOptions>: tiene que recibir la misma instancia que se valido
+        // aqui (la seccion, o los valores por defecto si era invalida), no volver a enlazar la
+        // seccion, o convivirian dos configuraciones distintas.
+        services.AddSingleton(Options.Create(options));
 
         services.AddSingleton(new ProviderCircuitBreaker(
             options.CircuitFailureThreshold,

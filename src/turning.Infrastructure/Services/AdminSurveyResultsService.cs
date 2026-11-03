@@ -17,7 +17,9 @@ public sealed class AdminSurveyResultsService : IAdminSurveyResultsService
         if (page < 1) throw new ArgumentOutOfRangeException(nameof(page));
         if (pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(pageSize));
 
-        var query = _db.SurveyResponses.AsNoTracking().Where(response => response.SubmittedAtUtc != null);
+        var query = _db.SurveyResponses.AsNoTracking().Where(response => !response.IsDeleted
+            && response.SubmittedAtUtc != null
+            && _db.ExperimentSessions.Any(session => session.Id == response.SessionId && !session.IsDeleted));
         if (participantId.HasValue)
             query = query.Where(response => response.OwnerUserId == participantId.Value);
         var total = await query.CountAsync(ct);
@@ -54,7 +56,8 @@ public sealed class AdminSurveyResultsService : IAdminSurveyResultsService
                     definition.Questions.OrderBy(question => question.Order)
                         .Select(question => new SurveyQuestionDto(question.Id, question.Code, question.Text, question.Type, question.Required, question.Order))
                         .ToArray()),
-                response.Answers.Select(answer => new SurveyAnswerDto(answer.SurveyQuestionId, answer.Value)).ToArray());
+                response.Answers.Where(answer => !answer.IsDeleted)
+                    .Select(answer => new SurveyAnswerDto(answer.SurveyQuestionId, answer.Value)).ToArray());
         }).ToArray();
         return new AdminSurveyResultsPageDto(items, total, page, pageSize);
     }

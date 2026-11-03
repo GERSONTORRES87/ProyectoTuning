@@ -1,0 +1,23 @@
+# Solo aplica a builds con la raiz del repositorio como contexto (src/turning.API/Dockerfile).
+**/bin/
+**/obj/
+**/TestResults/
+.git/
+.vs/
+.vscode/
+.idea/
+.agents/
+.ai/
+.claude/
+.github/
+.specify/
+tests/
+docs/
+specs/
+openspec/
+postman/
+data/
+*.md
+AI_HANDOFF.md
+NEXT_TURN.md
+AI_SEQUENCE.md

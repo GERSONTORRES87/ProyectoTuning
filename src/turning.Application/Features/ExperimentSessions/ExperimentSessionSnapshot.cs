@@ -5,6 +5,7 @@ namespace Turning.Application.Features.ExperimentSessions;
 /// </summary>
 public sealed class ExperimentSessionSnapshot
 {
+    public string ParticipationRole { get; init; } = "Observer";
     /// <summary>
     /// Identificador único de la sesión.
     /// </summary>

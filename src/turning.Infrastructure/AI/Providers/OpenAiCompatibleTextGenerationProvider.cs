@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Turning.Application.Features.AI;
 using Turning.Application.Interfaces;
@@ -22,7 +23,9 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        // Los parámetros opcionales que valen null no se envían: OpenAI rechaza los que no conoce.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
     private readonly HttpClient _httpClient;
@@ -163,7 +166,8 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
             model = _options.Model,
             messages,
             max_tokens = _options.MaxOutputTokens,
-            temperature = _options.Temperature
+            temperature = _options.Temperature,
+            reasoning = _options.DisableReasoning ? new { enabled = false } : null
         };
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions")

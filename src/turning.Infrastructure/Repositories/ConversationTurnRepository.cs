@@ -64,4 +64,15 @@ public sealed class ConversationTurnRepository : IConversationTurnRepository
     {
         return _dbContext.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<bool> TrySaveReplyAsync(CancellationToken cancellationToken = default)
+    {
+        try { await _dbContext.SaveChangesAsync(cancellationToken); return true; }
+        catch (DbUpdateConcurrencyException)
+        {
+            // El mensaje inicial ya es durable; una transición concurrente no debe perderlo.
+            _dbContext.ChangeTracker.Clear();
+            return false;
+        }
+    }
 }

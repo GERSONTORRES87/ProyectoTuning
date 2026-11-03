@@ -5,76 +5,70 @@ using turning.Web.Auth;
 
 namespace turning.Web.ExperimentSessions;
 
-public sealed class ExperimentSessionApiClient
+public sealed class ExperimentSessionApiClient(HttpClient httpClient, AuthSession authSession)
 {
-    private readonly HttpClient _httpClient;
-    private readonly AuthSession _authSession;
-
-    public ExperimentSessionApiClient(HttpClient httpClient, AuthSession authSession)
-    {
-        _httpClient = httpClient;
-        _authSession = authSession;
-    }
-
     public async Task<ExperimentSessionSnapshotDto?> GetLatestAsync(CancellationToken cancellationToken = default)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "api/experiment-sessions/latest");
-        AttachAccessToken(request);
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        return await ReadResponseAsync<ExperimentSessionSnapshotDto>(response, cancellationToken);
+        try { return await SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Get, "api/experiment-sessions/latest", null, cancellationToken); }
+        catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound) { return null; }
     }
 
-    public async Task<ExperimentSessionSnapshotDto> CreateBootstrapAsync(CreateExperimentSessionRequestDto requestDto, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/experiment-sessions/bootstrap")
-        {
-            Content = JsonContent.Create(requestDto)
-        };
+    public Task<ExperimentSessionSnapshotDto> CreateBootstrapAsync(CreateExperimentSessionRequestDto request, CancellationToken cancellationToken = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, "api/experiment-sessions/bootstrap", request, cancellationToken);
 
-        AttachAccessToken(request);
+    public Task<ExperimentSessionSnapshotDto> GetByIdAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Get, $"api/sessions/{id}", null, ct);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<ExperimentSessionSnapshotDto>(response, cancellationToken);
-    }
+    public Task<ParticipantSessionsDto> ListOwnAsync(Guid userId, int page = 1, CancellationToken ct = default) =>
+        SendAsync<ParticipantSessionsDto>(HttpMethod.Get, $"api/sessions/participant/{userId}?page={page}&pageSize=20", null, ct);
 
-    public async Task<IReadOnlyList<ConversationTurnSnapshotDto>> GetConversationTurnsAsync(Guid sessionId, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/experiment-sessions/{sessionId}/conversation-turns");
-        AttachAccessToken(request);
+    public Task<PagedSessionsDto> ListAwaitingAsync(int page = 1, CancellationToken ct = default) =>
+        SendAsync<PagedSessionsDto>(HttpMethod.Get, $"api/sessions/awaiting-interlocutor?page={page}&pageSize=20", null, ct);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        var result = await ReadResponseAsync<ConversationTurnSnapshotDto[]>(response, cancellationToken);
-        return result;
-    }
+    public Task<ExperimentSessionSnapshotDto> JoinAsync(string sessionCode, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, "api/sessions/join", new { sessionCode }, ct);
 
-    public async Task<ConversationTurnSnapshotDto> AddConversationTurnAsync(Guid sessionId, AddConversationTurnRequestDto requestDto, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"api/experiment-sessions/{sessionId}/conversation-turns")
-        {
-            Content = JsonContent.Create(requestDto)
-        };
+    public Task<ExperimentSessionSnapshotDto> AssignAsync(Guid id, Guid interlocutorUserId, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, $"api/sessions/{id}/interlocutor", new { interlocutorUserId }, ct);
 
-        AttachAccessToken(request);
+    public Task<ExperimentSessionSnapshotDto> ActivateAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, $"api/sessions/{id}/activate", null, ct);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<ConversationTurnSnapshotDto>(response, cancellationToken);
-    }
+    public Task<ExperimentSessionSnapshotDto> CompleteAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, $"api/sessions/{id}/complete", null, ct);
 
-    public async Task<SessionListDto> ListSessionsAsync(int pageSize = 100, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/results?pageSize={pageSize}");
-        AttachAccessToken(request);
+    public Task<ExperimentSessionSnapshotDto> CancelAsync(Guid id, string reason, CancellationToken ct = default) =>
+        SendAsync<ExperimentSessionSnapshotDto>(HttpMethod.Post, $"api/sessions/{id}/cancel", new { reason }, ct);
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<SessionListDto>(response, cancellationToken);
-    }
+    public async Task<IReadOnlyList<ConversationTurnSnapshotDto>> GetConversationTurnsAsync(Guid id, CancellationToken cancellationToken = default, int? afterSequence = null) =>
+        await SendAsync<ConversationTurnSnapshotDto[]>(HttpMethod.Get, $"api/experiment-sessions/{id}/conversation-turns" + (afterSequence.HasValue ? $"?afterSequence={afterSequence.Value}&limit=200" : ""), null, cancellationToken);
+
+    public Task<ConversationTurnSnapshotDto> AddConversationTurnAsync(Guid id, AddConversationTurnRequestDto request, CancellationToken cancellationToken = default) =>
+        SendAsync<ConversationTurnSnapshotDto>(HttpMethod.Post, $"api/experiment-sessions/{id}/conversation-turns", request, cancellationToken);
+
+    public Task<SurveyDefinitionDto> GetSurveyAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<SurveyDefinitionDto>(HttpMethod.Get, $"api/sessions/{id}/survey", null, ct);
+
+    public async Task SubmitSurveyAsync(Guid id, SurveySubmitRequestDto request, CancellationToken ct = default) =>
+        _ = await SendAsync<System.Text.Json.JsonElement>(HttpMethod.Post, $"api/sessions/{id}/survey/responses", request, ct);
+
+    public Task<SessionResultDto> GetResultAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<SessionResultDto>(HttpMethod.Get, $"api/sessions/{id}/results", null, ct);
+
+    public Task<PagedSessionsDto> ListResultsAsync(int page = 1, CancellationToken ct = default) =>
+        SendAsync<PagedSessionsDto>(HttpMethod.Get, $"api/results?page={page}&pageSize=20", null, ct);
+
+    public Task<EmotionDto[]> GetEmotionsAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<EmotionDto[]>(HttpMethod.Get, $"api/sessions/{id}/emotions", null, ct);
+
+    public async Task AddEmotionAsync(Guid id, string emotion, double score, CancellationToken ct = default) =>
+        _ = await SendAsync<System.Text.Json.JsonElement>(HttpMethod.Post, $"api/sessions/{id}/emotions", new { emotion, score, source = "self-report" }, ct);
+
+    public Task<AvatarDto> GetAvatarAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync<AvatarDto>(HttpMethod.Get, $"api/sessions/{id}/avatar/current", null, ct);
+
+    public Task<PagedSessionsDto> ListSessionsAsync(int pageSize = 100, CancellationToken ct = default) =>
+        SendAsync<PagedSessionsDto>(HttpMethod.Get, $"api/results?page=1&pageSize={pageSize}", null, ct);
 
     public async Task<SessionListDto> ListAllSessionsAsync(CancellationToken cancellationToken = default)
     {
@@ -84,83 +78,30 @@ public sealed class ExperimentSessionApiClient
 
         for (var page = 1; ; page++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"api/results?page={page}&pageSize={pageSize}");
-            AttachAccessToken(request);
-
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            var result = await ReadResponseAsync<SessionListDto>(response, cancellationToken);
+            var result = await SendAsync<SessionListDto>(HttpMethod.Get,
+                $"api/results?page={page}&pageSize={pageSize}", null, cancellationToken);
             total = result.Total;
             items.AddRange(result.Items);
-
-            if (result.Items.Count == 0 || items.Count >= total)
-            {
-                break;
-            }
+            if (result.Items.Count == 0 || items.Count >= total) break;
         }
 
         return new SessionListDto { Items = items.DistinctBy(session => session.Id).ToList(), Total = total };
     }
 
-    public async Task<SessionListDto> ListAwaitingInterlocutorAsync(CancellationToken cancellationToken = default)
+    public Task<PagedSessionsDto> ListAwaitingInterlocutorAsync(CancellationToken ct = default) =>
+        SendAsync<PagedSessionsDto>(HttpMethod.Get, "api/sessions/awaiting-interlocutor?page=1&pageSize=100", null, ct);
+
+    public Task<ExperimentSessionSnapshotDto> JoinAsInterlocutorAsync(string sessionCode, CancellationToken ct = default) =>
+        JoinAsync(sessionCode, ct);
+
+    public Task<SessionResultDto> GetSessionResultAsync(Guid id, CancellationToken ct = default) =>
+        GetResultAsync(id, ct);
+
+    private async Task<T> SendAsync<T>(HttpMethod method, string uri, object? body, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "api/sessions/awaiting-interlocutor");
-        AttachAccessToken(request);
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<SessionListDto>(response, cancellationToken);
-    }
-
-    public async Task<ExperimentSessionSnapshotDto> JoinAsInterlocutorAsync(string sessionCode, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/sessions/join")
-        {
-            Content = JsonContent.Create(new { sessionCode })
-        };
-
-        AttachAccessToken(request);
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<ExperimentSessionSnapshotDto>(response, cancellationToken);
-    }
-
-    public async Task<SessionResultDto> GetSessionResultAsync(Guid sessionId, CancellationToken cancellationToken = default)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"api/sessions/{sessionId}/results");
-        AttachAccessToken(request);
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadResponseAsync<SessionResultDto>(response, cancellationToken);
-    }
-
-    private void AttachAccessToken(HttpRequestMessage request)
-    {
-        if (!string.IsNullOrWhiteSpace(_authSession.AccessToken))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _authSession.AccessToken);
-        }
-    }
-
-    private static async Task<TResponse> ReadResponseAsync<TResponse>(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (response.IsSuccessStatusCode)
-        {
-            var result = await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: cancellationToken);
-            return result ?? throw new ApiException("La API devolvio una respuesta vacia.", response.StatusCode);
-        }
-
-        ApiErrorResponse? apiError = null;
-
-        try
-        {
-            apiError = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(cancellationToken: cancellationToken);
-        }
-        catch
-        {
-        }
-
-        throw new ApiException(
-            apiError?.Message ?? $"No fue posible completar la solicitud ({(int)response.StatusCode}).",
-            response.StatusCode,
-            apiError?.Details);
+        using var request = new HttpRequestMessage(method, uri);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        if (!string.IsNullOrWhiteSpace(authSession.AccessToken)) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", authSession.AccessToken);
+        return await ApiResponse.SendAsync<T>(httpClient, request, ct);
     }
 }

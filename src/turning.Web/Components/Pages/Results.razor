@@ -1,5 +1,5 @@
 @page "/results"
-@attribute [Authorize(Roles = "Administrator,Researcher")]
+@attribute [Authorize]
 
 @using System.Net
 @using System.Text.Json
@@ -14,6 +14,8 @@
 <PageTitle>SUE — Resultados y Análisis</PageTitle>
 
 <div class="sue-page">
+    @if (_canViewGlobal)
+    {
     <header class="sue-header results-header">
         <div>
             <p class="sue-eyebrow">▤ Análisis</p>
@@ -140,7 +142,7 @@
                                     <td>@StatusLabel(session.Status)</td>
                                     <td>@session.ConversationTurnCount</td>
                                     <td>@session.EmotionSampleCount</td>
-                                    <td><button aria-label="@($"Ver análisis de {session.SessionCode}")" aria-pressed="@(session.Id == _selectedSessionId ? "true" : "false")" @onclick="() => SelectSession(session.Id)">Ver</button></td>
+                                    <td><button aria-label="@($"Ver análisis de {session.SessionCode}")" aria-pressed="@(session.Id == _selectedSessionId ? "true" : "false")" @onclick="() => SelectSession(session.Id)">Ver</button> <a href="/results?sessionId=@session.Id">Detalle de sesión</a></td>
                                 </tr>
                             }
                         </tbody>
@@ -167,6 +169,42 @@
                 <EmotionDistributionChart Counts="SelectedEmotionCounts" Title="Emociones de esta sesión" />
             </div>
         }
+    }
+    }
+    @if (!_canViewGlobal || SessionId.HasValue)
+    {
+    @if (!_canViewGlobal)
+    {
+        <header class="sue-header"><p class="sue-eyebrow">Evidencia</p><h1 class="sue-title">Resultados de la sesión</h1><p class="sue-subtitle">Datos registrados durante el experimento.</p></header>
+    }
+    <SessionSelector SessionId="SessionId" OnSelected="LoadSessionAsync" />
+    @if (_error is not null) { <div class="sue-card" role="alert">@_error</div> }
+    @if (_sessionExportError is not null) { <div class="sue-card" role="alert">@_sessionExportError</div> }
+    @if (!_canViewGlobal && _session is not null && !_session.IsTerminal && _session.IsOwner)
+    {
+        <div class="sue-card"><p>El resultado completo estará disponible cuando termine la sesión.</p><a href="/conversations?sessionId=@_session.Id">Volver a la conversación</a></div>
+    }
+    @if (_result is not null)
+    {
+        <div class="sue-card">
+            <h2 class="sue-card-title">@_result.Session.SessionCode · @_result.Session.Status</h2>
+            <div class="sue-info-grid"><p>@_result.Conversation.Count mensajes</p><p>@_result.EmotionReadings.Count lecturas emocionales</p><p>@_result.AvatarExpressions.Count expresiones</p><p>@_result.Survey.Count(s => s.SubmittedAtUtc.HasValue) encuestas enviadas</p></div>
+            <AuthorizeView Roles="Researcher,Administrator"><p>Condición experimental: @_result.Session.Condition</p><p>Operaciones degradadas registradas: @_result.DegradedEvents.Count</p></AuthorizeView>
+            <button class="btn-ghost" @onclick="ExportSessionAsync">Descargar datos de esta sesión</button>
+        </div>
+        <div class="sue-card"><h2 class="sue-card-title">Conversación registrada</h2>
+            @if (_result.Conversation.Count == 0) { <p>No se registraron mensajes.</p> }
+            @foreach (var turn in _result.Conversation) { <div style="padding:12px 0;border-bottom:1px solid var(--arena-media)"><p><strong>@(turn.Sender == "Participant" ? "Participante" : "SUE")</strong> · @turn.CreatedAtUtc.ToLocalTime().ToString("g")</p><p>@turn.Message</p></div> }
+        </div>
+        <div class="sue-two-cols">
+            <div class="sue-card"><h2 class="sue-card-title">Lecturas emocionales</h2>@if (_result.EmotionReadings.Count == 0) { <p>Sin lecturas.</p> }@foreach (var reading in _result.EmotionReadings) { <p>@reading.Emotion · @reading.Score.ToString("P0") · @reading.CapturedAtUtc.ToLocalTime().ToString("g")</p> }</div>
+            <div class="sue-card"><h2 class="sue-card-title">Expresiones derivadas</h2>@if (_result.AvatarExpressions.Count == 0) { <p>Sin expresiones.</p> }@foreach (var avatar in _result.AvatarExpressions) { <p>@avatar.ExpressionName · @avatar.Intensity.ToString("P0") @(avatar.IsFallback ? "(respaldo)" : "")</p> }</div>
+        </div>
+        <div class="sue-card"><h2 class="sue-card-title">Encuesta</h2>
+            @if (!_result.Survey.Any(s => s.SubmittedAtUtc.HasValue)) { <p>Aún no hay encuesta enviada.</p>@if (_session?.IsOwner == true && _session.IsTerminal) { <a href="/surveys?sessionId=@_session.Id">Responder encuesta</a> } }
+            @foreach (var response in _result.Survey) { <p>Enviada: @(response.SubmittedAtUtc?.ToLocalTime().ToString("g") ?? "Pendiente")</p>@foreach (var answer in response.Answers) { <p>@QuestionLabel(answer.QuestionId): @answer.Value</p> } }
+        </div>
+    }
     }
 </div>
 
@@ -200,7 +238,71 @@
         .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase)
         ?? new Dictionary<string, int>();
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    [CascadingParameter] public Task<AuthenticationState> AuthenticationState { get; set; } = default!;
+    [SupplyParameterFromQuery] public Guid? SessionId { get; set; }
+    private bool _canViewGlobal;
+    private ExperimentSessionSnapshotDto? _session;
+    private SessionResultDto? _result;
+    private SurveyDefinitionDto? _definition;
+    private string? _error;
+    private string? _sessionExportError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationState).User;
+        _canViewGlobal = user.IsInRole("Researcher") || user.IsInRole("Administrator");
+        if (_canViewGlobal) await LoadAsync();
+    }
+
+    private async Task LoadSessionAsync(ExperimentSessionSnapshotDto? session)
+    {
+        _session = session;
+        _result = null;
+        _definition = null;
+        _error = null;
+        _sessionExportError = null;
+        if (session is null) return;
+        if (!_canViewGlobal && !session.IsOwner)
+        {
+            _error = "Tu participación no permite consultar los resultados de esta sesión.";
+            return;
+        }
+        if (!_canViewGlobal && !session.IsTerminal) return;
+        try
+        {
+            var result = await ExperimentSessionApiClient.GetResultAsync(session.Id, _disposeSource.Token);
+            var definition = session.IsTerminal && result.Survey.Count > 0
+                ? await ExperimentSessionApiClient.GetSurveyAsync(session.Id, _disposeSource.Token)
+                : null;
+            if (_disposed || _session?.Id != session.Id) return;
+            _result = result;
+            _definition = definition;
+        }
+        catch (OperationCanceledException) when (_disposed) { }
+        catch (ApiException ex) { if (_session?.Id == session.Id) _error = ex.Message; }
+    }
+
+    private string QuestionLabel(Guid id) => _definition?.Questions.FirstOrDefault(question => question.Id == id)?.Text ?? $"Pregunta {id}";
+
+    private async Task ExportSessionAsync()
+    {
+        if (_result is null) return;
+        _sessionExportError = null;
+        object report = _canViewGlobal ? _result : new
+        {
+            _result.Session.SessionCode,
+            _result.Session.Status,
+            _result.Conversation,
+            Emotions = _result.EmotionReadings.Select(emotion => new { emotion.Emotion, emotion.Score, emotion.CapturedAtUtc }),
+            Expressions = _result.AvatarExpressions.Select(avatar => new { avatar.ExpressionName, avatar.Intensity }),
+            _result.Survey
+        };
+        try
+        {
+            await JS.InvokeVoidAsync("sueDownloadJson", $"sue-{_result.Session.SessionCode}.json", JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (JSException) { _sessionExportError = "No fue posible descargar los datos de la sesión. Vuelve a intentarlo."; }
+    }
 
     private async Task LoadAsync()
     {
@@ -328,7 +430,7 @@
         "TimedOut" => "Expirada", "Cancelled" => "Cancelada", _ => status
     };
 
-    private static string ConditionLabel(string condition) => condition == "AI" ? "IA" : condition == "Human" ? "Humana" : condition;
+    private static string ConditionLabel(string? condition) => condition == "AI" ? "IA" : condition == "Human" ? "Humana" : condition ?? "—";
 
     private static string EmotionLabel(string? emotion) => emotion?.Trim().ToLowerInvariant() switch
     {

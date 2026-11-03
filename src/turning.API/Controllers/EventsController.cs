@@ -15,8 +15,8 @@ public sealed class EventsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get(Guid sessionId, [FromQuery] Guid? after, CancellationToken ct)
     {
-        try { var list = await _svc.ListAsync(sessionId, after, ct); return Ok(list); }
-        catch (InvalidOperationException ex) when (ex.Message=="SESSION_NOT_FOUND") { return NotFound(); }
+        try { var list = await _svc.ListAsync(sessionId, after, ct, User.IsInRole("Researcher") || User.IsInRole("Administrator")); return Ok(list); }
+        catch (InvalidOperationException ex) when (ex.Message=="SESSION_NOT_FOUND") { return NotFound(new { error=ex.Message }); }
         catch (InvalidOperationException ex) when (ex.Message=="EVENT_EXPIRED") { return StatusCode(410, new { error=ex.Message }); }
     }
 }

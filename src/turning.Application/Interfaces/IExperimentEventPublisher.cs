@@ -5,6 +5,11 @@ namespace Turning.Application.Interfaces;
 /// </summary>
 public static class ExperimentEventTypes
 {
+    public const string SessionStateChanged = "SessionStateChanged";
+    public const string SessionEnded = "SessionEnded";
+    public const string SurveyAvailable = "SurveyAvailable";
+    public const string EmotionReadingAdded = "EmotionReadingAdded";
+    public const string AvatarExpressionChanged = "AvatarExpressionChanged";
     /// <summary>Se registró un turno de conversación.</summary>
     public const string ConversationTurnAdded = "ConversationTurnAdded";
 

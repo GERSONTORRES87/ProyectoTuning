@@ -42,4 +42,5 @@ public interface IConversationTurnRepository
     /// Guarda cambios pendientes de la conversación.
     /// </summary>
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<bool> TrySaveReplyAsync(CancellationToken cancellationToken = default);
 }

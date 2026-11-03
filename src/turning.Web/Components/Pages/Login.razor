@@ -56,6 +56,12 @@
                 </button>
             </EditForm>
 
+            @* Fuera del formulario: es una navegación, no debe enviar el login. *@
+            <a href="/forgot-password" class="btn-ghost"
+               style="display: block; width: 100%; box-sizing: border-box; margin-top: 12px; text-align: center; text-decoration: none;">
+                ¿Olvidaste tu contraseña?
+            </a>
+
             <p style="text-align: center; margin-top: 24px; font-size: 14px; color: var(--barro-claro);">
                 ¿Primera vez aquí? 
                 <a href="@BuildRegisterLink()" 

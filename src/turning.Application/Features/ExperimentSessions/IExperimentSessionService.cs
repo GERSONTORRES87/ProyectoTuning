@@ -8,9 +8,9 @@ public interface IExperimentSessionService
     /// <summary>
     /// Crea una sesión experimental inicial para el usuario autenticado.
     /// </summary>
-    Task<ExperimentSessionSnapshot> CreateBootstrapSessionAsync(Guid ownerUserId, CreateExperimentSessionRequest? request = null, CancellationToken cancellationToken = default);
+    Task<ExperimentSessionSnapshot> CreateBootstrapSessionAsync(Guid ownerUserId, CreateExperimentSessionRequest? request = null, CancellationToken cancellationToken = default, bool isPrivilegedRequester = false);
 
-    Task<ExperimentSessionSnapshot?> GetLatestSessionAsync(Guid ownerUserId, CancellationToken cancellationToken = default);
+    Task<ExperimentSessionSnapshot?> GetLatestSessionAsync(Guid ownerUserId, CancellationToken cancellationToken = default, bool isPrivilegedRequester = false);
     /// <summary>
     /// Obtiene una sesion por id. Solo el propietario o un solicitante privilegiado
     /// (Researcher/Administrator) puede verla; para el resto la sesion no existe.

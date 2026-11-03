@@ -28,7 +28,7 @@ public class ExperimentSessionServiceTests
         });
 
         // Assert
-        result.Condition.Should().Be("AI");
+        result.Condition.Should().Be("Hidden");
         result.Status.Should().Be("Created");
         result.AvatarState.Should().Be("Neutral");
         result.ConversationTurnCount.Should().Be(0);
@@ -105,7 +105,7 @@ public class ExperimentSessionServiceTests
         var result = await service.GetByIdAsync(session.Id, requestingUserId: ownerId, isPrivilegedRequester: false);
 
         result.Id.Should().Be(session.Id);
-        result.Condition.Should().Be("Human");
+        result.Condition.Should().Be("Hidden");
     }
 
     [Fact]

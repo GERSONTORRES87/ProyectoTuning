@@ -85,17 +85,10 @@ public class AuthServiceTests
         var exceptionAssertion = await act.Should().ThrowAsync<TurningApplicationException>();
         exceptionAssertion.Which.Code.Should().Be("AUTH_INVALID_CREDENTIALS");
     }
-    /// <summary>
-    /// Documenta el comportamiento vigente, no el deseado: el registro público
-    /// concede roles privilegiados a quien los pida, de modo que cualquiera puede
-    /// saltarse el aislamiento por propietario. Se mantiene así a propósito
-    /// mientras no exista una vía administrativa de asignar roles; cuando se
-    /// acuerde con el equipo, esta prueba debe invertirse y esperar el rechazo.
-    /// </summary>
     [Theory]
     [InlineData("Researcher")]
     [InlineData("Administrator")]
-    public async Task RegisterAsync_WithPrivilegedRole_ShouldGrantIt_PendienteDeRestriccion(string rolePedido)
+    public async Task RegisterAsync_WithPrivilegedRole_ShouldRejectWithoutPersisting(string rolePedido)
     {
         // Arrange
         var service = new AuthService(_userRepository, _passwordHasherService, _tokenService);
@@ -123,18 +116,17 @@ public class AuthServiceTests
         });
 
         // Act
-        await service.RegisterAsync(request);
+        var act = () => service.RegisterAsync(request);
 
         // Assert
-        await _userRepository.Received(1).AddAsync(
-            Arg.Is<UserAccount>(user => user.Role == rolePedido),
-            Arg.Any<CancellationToken>());
+        (await act.Should().ThrowAsync<TurningApplicationException>()).Which.Code.Should().Be("AUTH_ROLE_FORBIDDEN");
+        await _userRepository.DidNotReceive().AddAsync(Arg.Any<UserAccount>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task RegisterAsync_WithoutRole_ShouldRejectAndNotPersist(string rolePedido)
+    public async Task RegisterAsync_WithoutRole_ShouldDefaultToParticipant(string rolePedido)
     {
         // Arrange
         var service = new AuthService(_userRepository, _passwordHasherService, _tokenService);
@@ -147,14 +139,11 @@ public class AuthServiceTests
         };
 
         // Act
-        Func<Task> act = async () => await service.RegisterAsync(request);
+        _passwordHasherService.HashPassword(Arg.Any<UserAccount>(), request.Password).Returns("hashed-password");
 
         // Assert
-        var exceptionAssertion = await act.Should().ThrowAsync<TurningApplicationException>();
-        exceptionAssertion.Which.Code.Should().Be("AUTH_ROLE_REQUIRED");
-
-        await _userRepository.DidNotReceive().AddAsync(Arg.Any<UserAccount>(), Arg.Any<CancellationToken>());
-        await _userRepository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await service.RegisterAsync(request);
+        await _userRepository.Received(1).AddAsync(Arg.Is<UserAccount>(u => u.Role == UserRoles.Participant), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -177,6 +166,21 @@ public class AuthServiceTests
         var exceptionAssertion = await act.Should().ThrowAsync<TurningApplicationException>();
         exceptionAssertion.Which.Code.Should().Be("AUTH_ROLE_UNKNOWN");
 
+        await _userRepository.DidNotReceive().AddAsync(Arg.Any<UserAccount>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("a@test.test, b@test.test")]
+    [InlineData("Ana <ana@test.test>")]
+    public async Task RegisterAsync_WithEmailThatIsNotASingleAddress_ShouldRejectBeforeTouchingRepository(string email)
+    {
+        // Una lista guardada como correo haría que el restablecimiento escribiera a varias direcciones.
+        var service = new AuthService(_userRepository, _passwordHasherService, _tokenService);
+
+        Func<Task> act = async () => await service.RegisterAsync(new RegisterRequest { FullName = "Ana", Email = email, Password = "secret123" });
+
+        (await act.Should().ThrowAsync<TurningApplicationException>()).Which.Code.Should().Be("AUTH_INVALID_REQUEST");
         await _userRepository.DidNotReceive().AddAsync(Arg.Any<UserAccount>(), Arg.Any<CancellationToken>());
     }
 

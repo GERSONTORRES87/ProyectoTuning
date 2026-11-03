@@ -1,7 +1,9 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Turning.Application.Interfaces;
 using Turning.Domain.Entities;
 using Turning.Infrastructure.Persistence;
+using TurningApplicationException = Turning.Application.Exceptions.ApplicationException;
 
 namespace Turning.Infrastructure.Repositories;
 
@@ -41,8 +43,32 @@ public sealed class UserAccountRepository : IUserAccountRepository
     {
         var normalizedEmail = UserAccount.NormalizeEmail(email);
 
+        // Sin filtro IsDeleted: el índice único de NormalizedEmail también reserva el correo de cuentas eliminadas.
         return _dbContext.UserAccounts
-            .AnyAsync(user => user.NormalizedEmail == normalizedEmail && !user.IsDeleted, cancellationToken);
+            .AnyAsync(user => user.NormalizedEmail == normalizedEmail, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<(IReadOnlyList<UserAccount> Items, int Total)> SearchAsync(
+        string? query, int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var accounts = _dbContext.UserAccounts.AsNoTracking().Where(user => !user.IsDeleted);
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            // NormalizedEmail ya está en mayúsculas; la intercalación de SQL Server no distingue mayúsculas en FullName.
+            var text = query.Trim();
+            var upper = text.ToUpperInvariant();
+            accounts = accounts.Where(user => user.NormalizedEmail.Contains(upper) || user.FullName.Contains(text));
+        }
+
+        var total = await accounts.CountAsync(cancellationToken);
+        var items = await accounts
+            .OrderBy(user => user.NormalizedEmail)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
     }
 
     /// <inheritdoc />
@@ -54,8 +80,17 @@ public sealed class UserAccountRepository : IUserAccountRepository
     }
 
     /// <inheritdoc />
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is SqlException { Number: 2601 or 2627 }
+            && ex.Entries.Any(entry => entry.Entity is UserAccount && entry.State == EntityState.Added))
+        {
+            throw new TurningApplicationException("Ya existe un usuario registrado con ese correo.", "AUTH_USER_ALREADY_EXISTS");
+        }
     }
 }

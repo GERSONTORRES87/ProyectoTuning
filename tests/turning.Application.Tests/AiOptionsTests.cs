@@ -83,6 +83,37 @@ public class AiOptionsTests
         options.Validate().Should().ContainSingle(e => e.Contains("rule-based"));
     }
 
+    [Theory]
+    [InlineData("rule-based", "openai")]
+    [InlineData("openai", "rule-based", "openrouter")]
+    public void Validate_ShouldRequireTheRuleBasedProviderToBeLast(params string[] order)
+    {
+        // El router sigue este orden y rule-based nunca falla: si no va ultimo, los externos
+        // configurados despues no se llamarian jamas, sin ningun error visible.
+        var options = new AiOptions { ProviderOrder = order };
+
+        options.Validate().Should().ContainSingle(e => e.Contains("debe terminar en"));
+    }
+
+    [Theory]
+    [InlineData("rule-based", "openai", "rule-based")]
+    [InlineData("openai", "RULE-BASED", "rule-based")]
+    public void Validate_ShouldRejectADuplicatedRuleBasedProvider(params string[] order)
+    {
+        var options = new AiOptions { ProviderOrder = order };
+
+        options.Validate().Should().ContainSingle(e => e.Contains("solo puede incluir"));
+    }
+
+    [Theory]
+    [InlineData("rule-based")]
+    [InlineData("openai", "rule-based")]
+    [InlineData("OPENROUTER", "Rule-Based")]
+    public void Validate_ShouldAcceptAChainThatEndsInTheRuleBasedProvider(params string[] order)
+    {
+        new AiOptions { ProviderOrder = order }.Validate().Should().BeEmpty();
+    }
+
     [Fact]
     public void Validate_ShouldRejectATimeoutLargerThanTheTotalBudget()
     {

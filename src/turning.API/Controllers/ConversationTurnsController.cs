@@ -20,6 +20,7 @@ namespace Turning.API.Controllers;
 [Authorize]
 [Route("api/experiment-sessions/{sessionId:guid}/conversation-turns")]
 [AllowSessionInterlocutor]
+[AllowPrivilegedSessionWrite] // el servicio decide la participación real; un observador sin asignar recibe 404
 [Produces("application/json")]
 public sealed class ConversationTurnsController : ControllerBase
 {
@@ -62,7 +63,7 @@ public sealed class ConversationTurnsController : ControllerBase
             return Unauthorized();
         }
 
-        var turns = await _conversationTurnService.ListAsync(userId, sessionId, afterSequence, limit, cancellationToken);
+        var turns = await _conversationTurnService.ListAsync(userId, sessionId, afterSequence, limit, cancellationToken, IsPrivileged());
         return Ok(turns);
     }
 
@@ -103,7 +104,7 @@ public sealed class ConversationTurnsController : ControllerBase
             return Unauthorized();
         }
 
-        var turn = await _conversationTurnService.AddAsync(userId, sessionId, request, cancellationToken);
+        var turn = await _conversationTurnService.AddAsync(userId, sessionId, request, cancellationToken, IsPrivileged());
         return Ok(turn);
     }
 
@@ -114,4 +115,6 @@ public sealed class ConversationTurnsController : ControllerBase
 
         return Guid.TryParse(userIdClaim, out userId);
     }
+
+    private bool IsPrivileged() => User.IsInRole("Researcher") || User.IsInRole("Administrator");
 }
