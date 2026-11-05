@@ -1,12 +1,13 @@
 # Diagrama entidad-relación — Turning MVP
 
-El siguiente diagrama representa el modelo persistente de la migración `InitialSqlServer`.
+El siguiente diagrama representa el modelo persistente vigente (migraciones hasta `AddSessionInterlocutor`).
 Los identificadores son `uniqueidentifier`; las fechas se almacenan como `datetime2` y
 `ExperimentSessions.RowVersion` como `rowversion` de SQL Server.
 
 ```mermaid
 erDiagram
     UserAccounts ||--o{ ExperimentSessions : owns
+    UserAccounts |o--o{ ExperimentSessions : interlocutor
     UserAccounts ||--o{ SurveyResponses : submits
     ExperimentSessions ||--o| ConditionAssignments : receives
     ExperimentSessions ||--o{ ConversationTurns : contains
@@ -51,6 +52,8 @@ erDiagram
         datetime2 CancelledAtUtc
         nvarchar CancellationReason
         rowversion RowVersion
+        uniqueidentifier InterlocutorUserId FK
+        datetime2 InterlocutorJoinedAtUtc
         datetime2 CreatedAt
         datetime2 UpdatedAt
     }
@@ -100,6 +103,11 @@ erDiagram
         datetime2 CapturedAtUtc
         nvarchar Provider
         bit IsDegraded
+        float Confidence
+        float Polarity
+        nvarchar ModelVersion
+        nvarchar ScoresJson
+        int AnalysisLatencyMs
         datetime2 CreatedAt
         datetime2 UpdatedAt
     }
@@ -174,6 +182,7 @@ Restricciones relevantes:
 
 - `SessionCode`, `NormalizedEmail` y `SurveyDefinition.Code` son únicos.
 - Una sesión tiene como máximo una asignación (`ConditionAssignments.SessionId` único).
+- Una sesión tiene como máximo un interlocutor humano (`InterlocutorUserId`), distinto del dueño.
 - Una sesión no puede repetir el mismo número de turno.
 - Una respuesta no puede repetir la combinación sesión–encuesta.
 - Una respuesta no puede repetir la combinación respuesta–pregunta.
