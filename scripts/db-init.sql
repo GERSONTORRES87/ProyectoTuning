@@ -3,7 +3,8 @@
 -- Proyecto Turning — Entregable GE-02 (Gerson Torres, DBA)
 -- ==============================================================
 -- Qué hace: crea todas las tablas, FK, índices y constraints del
--- modelo (ver docs/2-arquitectura/modelo-datos/diagrama-er.md y docs/2-arquitectura/modelo-datos/diccionario-datos.md) si aún
+-- modelo (ver docs/2-arquitectura/modelo-datos/diagrama-er.md y
+-- docs/2-arquitectura/modelo-datos/diccionario-datos.md) si aún
 -- no existen. Es seguro ejecutarlo varias veces: cada bloque valida
 -- contra __EFMigrationsHistory antes de crear algo, por lo que no
 -- duplica tablas ni falla si ya fue aplicado antes.
@@ -12,13 +13,17 @@
 --   sqlcmd -S (localdb)\MSSQLLocalDB -d Turning -i scripts\db-init.sql
 -- o ejecutarlo desde SSMS conectado a la base de datos deseada.
 --
--- Alternativa recomendada para desarrollo local (SQLite, sin este
--- script): dotnet ef database update --project src	urning.Infrastructure
--- --startup-project src	urning.API  (ver scripts/db-reset.ps1).
--- Generado desde la migración EF Core 'InitialSqlServer'.
+-- Alternativa para desarrollo local (sin este script):
+--   dotnet ef database update --project src\turning.Infrastructure
+--   --startup-project src\turning.API  (ver scripts/db-reset.ps1).
+--
+-- Migraciones incluidas: InitialSqlServer, SyncPendingChanges,
+-- AddTextEmotionAnalysisFields, AddSessionInterlocutor.
+-- Para regenerarlo cuando haya migraciones nuevas:
+--   dotnet ef migrations script --idempotent -p src/turning.Infrastructure
+--   -s src/turning.API -o scripts/db-init.sql  (y volver a poner este encabezado)
 -- ==============================================================
-
-﻿IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
+IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
 BEGIN
     CREATE TABLE [__EFMigrationsHistory] (
         [MigrationId] nvarchar(150) NOT NULL,
@@ -446,6 +451,125 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260824194759_InitialSqlServer', N'10.0.0');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260902000330_SyncPendingChanges'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260902000330_SyncPendingChanges', N'10.0.0');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    ALTER TABLE [EmotionReadings] ADD [AnalysisLatencyMs] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    ALTER TABLE [EmotionReadings] ADD [Confidence] float NOT NULL DEFAULT 0.0E0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    ALTER TABLE [EmotionReadings] ADD [ModelVersion] nvarchar(50) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    ALTER TABLE [EmotionReadings] ADD [Polarity] float NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    ALTER TABLE [EmotionReadings] ADD [ScoresJson] nvarchar(1000) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916055106_AddTextEmotionAnalysisFields'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260916055106_AddTextEmotionAnalysisFields', N'10.0.0');
+END;
+
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    ALTER TABLE [ExperimentSessions] ADD [InterlocutorJoinedAtUtc] datetime2 NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    ALTER TABLE [ExperimentSessions] ADD [InterlocutorUserId] uniqueidentifier NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    CREATE INDEX [IX_ExperimentSessions_Condition_InterlocutorUserId_Status] ON [ExperimentSessions] ([Condition], [InterlocutorUserId], [Status]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    CREATE INDEX [IX_ExperimentSessions_InterlocutorUserId] ON [ExperimentSessions] ([InterlocutorUserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    ALTER TABLE [ExperimentSessions] ADD CONSTRAINT [FK_ExperimentSessions_UserAccounts_InterlocutorUserId] FOREIGN KEY ([InterlocutorUserId]) REFERENCES [UserAccounts] ([Id]) ON DELETE NO ACTION;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260916145009_AddSessionInterlocutor'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260916145009_AddSessionInterlocutor', N'10.0.0');
 END;
 
 COMMIT;
