@@ -3,7 +3,7 @@
 -- Proyecto Turning — Entregable GE-02 (Gerson Torres, DBA)
 -- ==============================================================
 -- Qué hace: crea todas las tablas, FK, índices y constraints del
--- modelo (ver docs/DIAGRAMA-ER-SQL-SERVER.md y docs/ER.md) si aún
+-- modelo (ver docs/2-arquitectura/modelo-datos/diagrama-er.md y docs/2-arquitectura/modelo-datos/diccionario-datos.md) si aún
 -- no existen. Es seguro ejecutarlo varias veces: cada bloque valida
 -- contra __EFMigrationsHistory antes de crear algo, por lo que no
 -- duplica tablas ni falla si ya fue aplicado antes.

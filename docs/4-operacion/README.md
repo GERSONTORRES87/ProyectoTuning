@@ -1,7 +1,11 @@
 # 4. Guía de arranque y operación
 
-Contenido previsto:
-- `quickstart.md` (base: `QUICKSTART.md`)
-- `configuracion-secretos.md` (base: `docs/configuracion-secretos.md`)
-- `smoke-test.md`: cómo correr `scripts/smoke.ps1` (el script no se mueve)
-- `troubleshooting.md`: errores comunes
+Documentos existentes (se enlazan desde aquí y se mantienen en su ubicación actual):
+- [QUICKSTART.md](../../QUICKSTART.md): instalación y arranque. Se mantiene en la raíz porque `scripts/handoff.ps1` lo referencia.
+- [configuracion-secretos.md](../configuracion-secretos.md): JWT, base de datos y correo. Lo referencian `docs/deploy.md` y specs de `openspec/`.
+- Smoke test: [scripts/smoke.ps1](../../scripts/smoke.ps1), se ejecuta desde la raíz del repo con `./scripts/smoke.ps1`.
+
+Pendiente:
+- `smoke-test.md`: cómo correr el smoke test e interpretar el resultado.
+- `troubleshooting.md`: errores comunes y soluciones.
+- Definir con su autor si `docs/deploy.md` se ubica en esta pauta.

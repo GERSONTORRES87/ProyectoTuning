@@ -2,7 +2,8 @@
 
 Clean Architecture, SOLID, DDD y organización de capas.
 
-Contenido previsto:
-- `clean-architecture.md` y `solid-ddd.md` (base: `ARCHITECTURE.md`)
-- [decisiones-tecnicas/](decisiones-tecnicas/): ADRs
-- [modelo-datos/](modelo-datos/): modelo de datos y base de datos
+- Documento base: [ARCHITECTURE.md](../../ARCHITECTURE.md). Se mantiene en la raíz del repo porque `QUICKSTART.md` lo enlaza.
+- [decisiones-tecnicas/](decisiones-tecnicas/): ADRs.
+- [modelo-datos/](modelo-datos/): diagrama ER y diccionario de datos.
+
+Pendiente: separar `ARCHITECTURE.md` en `clean-architecture.md` y `solid-ddd.md`.

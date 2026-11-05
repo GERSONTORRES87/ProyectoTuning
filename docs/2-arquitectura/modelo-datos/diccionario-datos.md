@@ -1,6 +1,6 @@
 # Diccionario de datos — Turning MVP
 
-Complementa a `docs/DIAGRAMA-ER-SQL-SERVER.md` (diagrama visual) con el detalle de
+Complementa a `docs/2-arquitectura/modelo-datos/diagrama-er.md` (diagrama visual) con el detalle de
 cada tabla y columna. Entregable GE-03 del plan individual de Gerson Torres (DBA).
 
 Convenciones generales:

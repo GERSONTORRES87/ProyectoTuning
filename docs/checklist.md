@@ -14,7 +14,7 @@ Usar antes de cada demo o entrega semanal. Marcar cada casilla con evidencia (lo
 ## 3. Migración de base de datos
 - [*] `dotnet ef database update` corre sin errores contra LocalDB
 - [*] `scripts/db-reset.ps1` deja la base en un estado limpio y reproducible
-- [*] Diagrama ER (`docs/DIAGRAMA-ER-SQL-SERVER.md`) refleja el esquema actual
+- [*] Diagrama ER (`docs/2-arquitectura/modelo-datos/diagrama-er.md`) refleja el esquema actual
 
 ## 4. Seed / datos de prueba
 - [*] Seed es idempotente (correrlo dos veces no duplica datos ni rompe)
