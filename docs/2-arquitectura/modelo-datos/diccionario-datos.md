@@ -221,18 +221,28 @@ tabla queda como trabajo futuro, fuera del alcance de esta entrega).
 
 ---
 
-## Índices relevantes (más allá de las PK/FK)
+## Índices relevantes (más allá de las PK)
 
 | Tabla | Índice | Propósito |
 |---|---|---|
+| UserAccounts | `NormalizedEmail` (único) | Evitar correos duplicados y acelerar el login. |
 | ExperimentSessions | `SessionCode` (único) | Búsqueda rápida por código legible. |
+| ExperimentSessions | `OwnerUserId, CreatedAt` | Listar las sesiones de un usuario ordenadas por fecha. |
+| ExperimentSessions | `Status, ActivatedAtUtc` | Consultar sesiones por estado y momento de activación. |
 | ExperimentSessions | `InterlocutorUserId` | Consultar las sesiones donde un usuario es interlocutor. |
 | ExperimentSessions | `Condition, InterlocutorUserId, Status` | Buscar sesiones disponibles para emparejar con un interlocutor. |
-| UserAccounts | `NormalizedEmail` (único) | Evitar correos duplicados y acelerar login. |
-| ConversationTurns | `ExperimentSessionId, SequenceNumber` (único) | Evitar turnos duplicados y ordenar la conversación eficientemente. |
+| ConditionAssignments | `SessionId` (único) | Una sesión solo puede tener una asignación de condición. |
+| ConversationTurns | `ExperimentSessionId, SequenceNumber` (único) | Evitar turnos duplicados y ordenar la conversación. |
+| EmotionReadings | `SessionId, CapturedAtUtc` | Lecturas de una sesión en orden de captura. |
+| AvatarExpressions | `SessionId, CreatedAt` | Expresiones del avatar de una sesión en orden. |
+| ExperimentEvents | `SessionId, OccurredAtUtc` | Eventos de una sesión en orden. |
+| SessionAuditEntries | `SessionId, OccurredAtUtc` | Auditoría de una sesión en orden. |
+| SurveyDefinitions | `Code` (único) | Evitar encuestas con el mismo código. |
+| SurveyQuestions | `SurveyDefinitionId, Order` (único) | Evitar dos preguntas en la misma posición de una encuesta. |
 | SurveyResponses | `SessionId, SurveyDefinitionId` (único) | Evitar respuestas duplicadas a la misma encuesta. |
 | SurveyAnswers | `SurveyResponseId, SurveyQuestionId` (único) | Evitar respuestas duplicadas a la misma pregunta. |
-| EmotionReadings / AvatarExpressions / ExperimentEvents / SessionAuditEntries | `SessionId` | Acelerar consultas de "todo lo relacionado con esta sesión". |
+
+Además, cada clave foránea que no queda cubierta por un índice compuesto de esta tabla tiene su propio índice simple (por ejemplo `EmotionReadingId` o `SurveyQuestionId`); esos no se listan aquí.
 
 ## Reglas de borrado
 
