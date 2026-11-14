@@ -124,13 +124,16 @@ public sealed class RagConversationGuard : IConversationGuard
 
     private static GuardDecision WithEmotion(GuardMode mode, IReadOnlyList<TopicGuide> topics, EmotionGuide? emotion)
     {
-        var guidance = topics.Select(topic => topic.Guidance).ToList();
-        var ids = topics.Select(topic => topic.Id).ToList();
+        // La emoción va primero: con la pauta del tema delante, el modelo respondía al tema y no a lo que la persona siente.
+        var guidance = new List<string>();
+        var ids = new List<string>();
         if (emotion is not null)
         {
             guidance.Add(emotion.Guidance);
             ids.Add($"emotion:{emotion.Emotion}");
         }
+        guidance.AddRange(topics.Select(topic => topic.Guidance));
+        ids.AddRange(topics.Select(topic => topic.Id));
         return new GuardDecision(mode, null, null, guidance, ids);
     }
 

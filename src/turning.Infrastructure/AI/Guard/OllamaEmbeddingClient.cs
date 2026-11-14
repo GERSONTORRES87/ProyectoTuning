@@ -24,10 +24,11 @@ public sealed class GuardOptions
     public int IndexTimeoutMs { get; set; } = 30000;
 
     /// <summary>
-    /// Similitud coseno desde la que una regla bloquea. Calibrado con paraphrase-multilingual: frases que no
-    /// deben bloquear llegaron a 0.745 («estudio inteligencia artificial»), así que se deja por encima.
+    /// Similitud coseno desde la que una regla bloquea. Calibrado con paraphrase-multilingual sobre 79 frases:
+    /// las cotidianas que no deben bloquear llegan a 0.758 («me quiero ir de esta ciudad») y las que deben
+    /// bloquear sin palabra clave empiezan en 0.832, así que el corte va en medio.
     /// </summary>
-    public double BlockThreshold { get; set; } = 0.76;
+    public double BlockThreshold { get; set; } = 0.80;
 
     /// <summary>Similitud coseno desde la que una pauta por tema entra al prompt (calibrado: aciertos ≥ 0.68).</summary>
     public double GuideThreshold { get; set; } = 0.65;

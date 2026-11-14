@@ -162,9 +162,14 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
 
     private HttpRequestMessage BuildRequest(TextGenerationRequest request)
     {
+        // La instrucción base va sola y sin cambios al inicio, y lo que cambia en cada turno (emoción y pautas)
+        // va justo antes del último mensaje. Así el modelo reutiliza la caché del prompt base y del historial:
+        // en sue-llm (CPU) procesar ~580 tokens sin caché tarda 7 s; con el inicio en caché, 0,6 s.
+        // Con la emoción dentro de la instrucción base, cada turno invalidaba todo y a partir del octavo
+        // mensaje el modelo no alcanzaba a responder en el límite por intento.
         var messages = new List<object>
         {
-            new { role = ChatMessage.RoleSystem, content = BuildSystemPrompt(request) }
+            new { role = ChatMessage.RoleSystem, content = _systemPrompt }
         };
 
         messages.AddRange(request.ConversationHistory.Select(message => new
@@ -172,6 +177,9 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
             role = message.Role,
             content = message.Content
         }));
+
+        if (BuildTurnHint(request) is { } hint)
+            messages.Add(new { role = ChatMessage.RoleSystem, content = hint });
 
         messages.Add(new { role = ChatMessage.RoleUser, content = request.UserInput });
 
@@ -205,24 +213,25 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
     }
 
     /// <summary>
-    /// Añade el contexto emocional (RF-EXP-01) y las pautas recuperadas por el filtro a la instrucción de sistema.
+    /// Indicación para este turno: el contexto emocional (RF-EXP-01) y las pautas recuperadas por el filtro.
+    /// Devuelve <c>null</c> si no hay ninguno de los dos.
     /// </summary>
-    private string BuildSystemPrompt(TextGenerationRequest request)
+    private static string? BuildTurnHint(TextGenerationRequest request)
     {
-        var prompt = _systemPrompt;
+        var parts = new List<string>();
 
         if (request.EmotionContext is { } emotion)
         {
             // En español: con la etiqueta en inglés («transmite sadness») un modelo pequeño responde peor.
             var name = EmotionNames.GetValueOrDefault(emotion.EmotionId, emotion.EmotionId);
-            prompt += $" El último mensaje de la persona transmite {name} " +
-                      $"con intensidad {emotion.Intensity:0.00}. Ten en cuenta ese estado emocional al responder.";
+            parts.Add($"El siguiente mensaje de la persona transmite {name} " +
+                      $"con intensidad {emotion.Intensity:0.00}. Ten en cuenta ese estado emocional al responder.");
         }
 
         if (request.Guidance.Count > 0)
-            prompt += " Pautas para esta respuesta: " + string.Join(" ", request.Guidance.Select(guide => $"- {guide}"));
+            parts.Add("Pautas para esta respuesta: " + string.Join(" ", request.Guidance.Select(guide => $"- {guide}")));
 
-        return prompt;
+        return parts.Count == 0 ? null : string.Join(" ", parts);
     }
 
     private static (string? Text, string? Model) ParseCompletion(string body)

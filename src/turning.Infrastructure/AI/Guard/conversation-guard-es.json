@@ -16,10 +16,9 @@
         "estoy pensando en acabar con todo",
         "todos estarían mejor sin mí",
         "siento que mi vida no vale nada",
-        "quiero terminar con mi vida",
-        "me quiero ir de este mundo"
+        "quiero terminar con mi vida"
       ],
-      "keywords": ["suicidarme", "suicidio", "quitarme la vida", "me quiero morir", "quiero morirme", "hacerme dano", "quiero cortarme", "pienso en cortarme", "cortarme las venas", "no quiero vivir", "no quiero seguir viviendo", "terminar con mi vida", "acabar con mi vida", "irme de este mundo"],
+      "keywords": ["suicidarme", "suicidio", "quitarme la vida", "me quiero morir", "quiero morirme", "hacerme dano", "quiero cortarme", "pienso en cortarme", "cortarme las venas", "no quiero vivir", "no quiero seguir viviendo", "terminar con mi vida", "acabar con mi vida", "irme de este mundo", "ir de este mundo"],
       "response": "Lo que me cuentas es muy importante y no tienes que cargar con esto solo. Por favor habla ahora mismo con alguien de confianza o con una línea de ayuda: en Colombia puedes llamar a la línea 192, opción 4, o a la Línea 106 en Bogotá. Si estás en peligro inmediato, llama al 123."
     },
     {
@@ -45,7 +44,6 @@
       "id": "datos-personales",
       "examples": [
         "dame tu número de teléfono",
-        "¿dónde vives exactamente?",
         "pásame tu correo o tu WhatsApp",
         "te paso mi contraseña",
         "este es mi número de cédula",
@@ -60,14 +58,12 @@
       "examples": [
         "¿qué medicamento debo tomar para la ansiedad?",
         "¿cuántas pastillas de ibuprofeno me puedo tomar?",
-        "¿cómo demando a mi jefe?",
+        "¿cómo pongo una demanda?",
         "dime qué diagnóstico tengo",
         "¿debo dejar mi tratamiento?",
-        "¿qué pastillas me recomiendas?",
-        "recétame algo para dormir",
         "¿qué me tomo para la depresión?"
       ],
-      "keywords": ["que medicamento debo", "cuantas pastillas", "que dosis", "como demando", "que pastillas me recomiendas", "que me tomo para", "recetame"],
+      "keywords": ["que medicamento debo", "que medicamento me", "cuantas pastillas", "que dosis", "como demando", "como pongo una demanda", "que pastillas me recomiendas", "que me tomo para", "recetame"],
       "response": "Uy, eso sí es mejor que lo veas con un profesional que te pueda revisar bien. ¿Y cómo te tiene todo eso?"
     },
     {

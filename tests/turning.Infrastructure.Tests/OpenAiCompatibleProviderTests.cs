@@ -163,6 +163,42 @@ public class OpenAiCompatibleProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_ShouldKeepTheBasePromptFixedAndPutTheTurnHintRightBeforeTheLastMessage()
+    {
+        var handler = new StubHandler().Enqueue(HttpStatusCode.OK, SuccessBody);
+        var request = Request() with
+        {
+            EmotionContext = new EmotionContext("fear", 0.9, 1.0, "text_analysis"),
+            Guidance = ["Transmite calma."]
+        };
+
+        await CreateProvider(handler).GenerateAsync(request, CancellationToken.None);
+
+        // El prefijo (instrucción base + historial) no puede cambiar entre turnos: es lo que el modelo guarda en caché.
+        using var body = System.Text.Json.JsonDocument.Parse(handler.CapturedBodies.Single());
+        var messages = body.RootElement.GetProperty("messages").EnumerateArray()
+            .Select(message => (Role: message.GetProperty("role").GetString(), Content: message.GetProperty("content").GetString()))
+            .ToArray();
+
+        messages.Select(message => message.Role).Should().Equal("system", "user", "system", "user");
+        messages[0].Content.Should().Be("Eres un interlocutor.");
+        messages[1].Content.Should().Be("Mensaje previo");
+        messages[2].Content.Should().Contain("miedo").And.Contain("Transmite calma.");
+        messages[3].Content.Should().Be("Hola");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldNotAddAHintWithoutEmotionOrGuidance()
+    {
+        var handler = new StubHandler().Enqueue(HttpStatusCode.OK, SuccessBody);
+
+        await CreateProvider(handler).GenerateAsync(Request(), CancellationToken.None);
+
+        using var body = System.Text.Json.JsonDocument.Parse(handler.CapturedBodies.Single());
+        body.RootElement.GetProperty("messages").GetArrayLength().Should().Be(3);
+    }
+
+    [Fact]
     public async Task GenerateAsync_ShouldNotRetry_WhenCredentialsAreInvalid()
     {
         var handler = new StubHandler()

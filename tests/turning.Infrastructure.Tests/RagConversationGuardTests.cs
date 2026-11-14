@@ -62,8 +62,8 @@ public class RagConversationGuardTests
         var decision = await guard.EvaluateAsync("se murio mi abuela ayer", EmotionLabel.Sadness);
 
         decision.Mode.Should().Be(GuardMode.Context);
-        decision.Guidance.Should().Equal("Valida la perdida.", "Responde con calma.");
-        decision.Trace.Should().Be("context:duelo,emotion:sadness");
+        decision.Guidance.Should().Equal("Responde con calma.", "Valida la perdida.");
+        decision.Trace.Should().Be("context:emotion:sadness,duelo");
     }
 
     [Fact]

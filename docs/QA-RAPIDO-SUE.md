@@ -13,6 +13,8 @@
 - El correo de «¿Olvidaste tu contraseña?» **no llega**: la cuenta de correo aún no está configurada.
 - Las respuestas automáticas tardan **hasta ~12 s** y el español del modelo es sencillo, a veces raro. Sí es defecto si pasa de 15 s, si no llega nada o si una respuesta parece plantilla en varios turnos seguidos.
 - El clasificador de emociones puede equivocarse con algunas frases (por ejemplo, enojo leído como sorpresa). Anotar la frase y lo que salió.
+- Las lecturas **Neutral** muestran una intensidad baja (1–20 %): el número es la carga emocional del texto, no la seguridad del clasificador.
+- Si se cambia de sección (por ejemplo a Emociones) **antes** de que llegue la respuesta, esa respuesta no llega. Esperar la respuesta antes de salir de Conversación.
 
 ## Preparación (5 min)
 
