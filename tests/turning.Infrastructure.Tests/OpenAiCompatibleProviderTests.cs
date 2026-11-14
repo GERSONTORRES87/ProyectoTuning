@@ -147,8 +147,8 @@ public class OpenAiCompatibleProviderTests
 
         await CreateProvider(handler).GenerateAsync(request, CancellationToken.None);
 
-        // RF-EXP-01: el contexto emocional viaja con la petición.
-        handler.CapturedBodies.Single().Should().Contain("sadness");
+        // RF-EXP-01: el contexto emocional viaja con la petición, con la emoción en español.
+        handler.CapturedBodies.Single().Should().Contain("tristeza");
     }
 
     [Fact]

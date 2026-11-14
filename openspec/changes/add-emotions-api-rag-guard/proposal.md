@@ -11,6 +11,7 @@ La emoción de cada mensaje del participante sale hoy de un léxico simulado, au
 - Nuevo filtro RAG antes del modelo de lenguaje en la condición `AI`: busca el mensaje en una base de conocimiento corta y versionada.
   - Si coincide con una regla de bloqueo, responde un texto aprobado sin llamar al modelo.
   - Si no, añade al prompt las pautas más parecidas y la pauta de la emoción detectada.
+- El interlocutor de la condición `AI` responde en tono emocional y coloquial colombiano: reacciona primero a lo que la persona siente, en frases cortas, con modismos usados con moderación; las pautas y las respuestas aprobadas siguen ese registro.
 - La búsqueda usa embeddings multilingües servidos por el contenedor local `sue-llm` (Ollama, `paraphrase-multilingual`). Sin embeddings, las reglas de bloqueo se comprueban por palabras clave.
 - El evento de la respuesta registra qué hizo el filtro. El participante no lo ve.
 - Despliegue: nuevo contenedor interno `sue-emotions` con la API de Héctor sin modificar su código.

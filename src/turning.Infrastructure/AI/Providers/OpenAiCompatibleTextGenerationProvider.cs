@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Turning.Application.Features.AI;
 using Turning.Application.Interfaces;
+using Turning.Domain.Entities;
 
 namespace Turning.Infrastructure.AI.Providers;
 
@@ -27,6 +28,19 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
         // Los parámetros opcionales que valen null no se envían: OpenAI rechaza los que no conoce.
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static readonly IReadOnlyDictionary<string, string> EmotionNames =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [EmotionLabel.Joy] = "alegría",
+            [EmotionLabel.Sadness] = "tristeza",
+            [EmotionLabel.Anger] = "enojo",
+            [EmotionLabel.Surprise] = "sorpresa",
+            [EmotionLabel.Fear] = "miedo",
+            [EmotionLabel.Disgust] = "asco",
+            [EmotionLabel.Confusion] = "confusión",
+            [EmotionLabel.Neutral] = "un ánimo neutro"
+        };
 
     private readonly HttpClient _httpClient;
     private readonly AiProviderOptions _options;
@@ -199,7 +213,9 @@ public sealed class OpenAiCompatibleTextGenerationProvider : ITextGenerationProv
 
         if (request.EmotionContext is { } emotion)
         {
-            prompt += $" El último mensaje del participante transmite {emotion.EmotionId} " +
+            // En español: con la etiqueta en inglés («transmite sadness») un modelo pequeño responde peor.
+            var name = EmotionNames.GetValueOrDefault(emotion.EmotionId, emotion.EmotionId);
+            prompt += $" El último mensaje de la persona transmite {name} " +
                       $"con intensidad {emotion.Intensity:0.00}. Ten en cuenta ese estado emocional al responder.";
         }
 
