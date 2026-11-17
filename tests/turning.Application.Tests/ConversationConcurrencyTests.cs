@@ -32,7 +32,7 @@ public class ConversationConcurrencyTests
             return Task.CompletedTask;
         });
         _turns.TrySaveReplyAsync(Arg.Any<CancellationToken>()).Returns(true);
-        _emotions.Analyze(Arg.Any<string>()).Returns(new TextEmotionDto("neutral", 0, .3, 0,
+        _emotions.AnalyzeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new TextEmotionDto("neutral", 0, .3, 0,
             TextEmotionDto.SourceTextAnalysis, false, "test", 1, new Dictionary<string, double>()));
     }
 

@@ -26,7 +26,7 @@ public class ConversationInterlocutorTests
 
     public ConversationInterlocutorTests()
     {
-        _emotions.Analyze(Arg.Any<string>()).Returns(new TextEmotionDto(
+        _emotions.AnalyzeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new TextEmotionDto(
             "neutral", 0, 0.3, 0, TextEmotionDto.SourceFallback, true, "lexicon-test", 1,
             new Dictionary<string, double>()));
 

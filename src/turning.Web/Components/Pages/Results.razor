@@ -197,7 +197,7 @@
             @foreach (var turn in _result.Conversation) { <div style="padding:12px 0;border-bottom:1px solid var(--arena-media)"><p><strong>@(turn.Sender == "Participant" ? "Participante" : "SUE")</strong> · @turn.CreatedAtUtc.ToLocalTime().ToString("g")</p><p>@turn.Message</p></div> }
         </div>
         <div class="sue-two-cols">
-            <div class="sue-card"><h2 class="sue-card-title">Lecturas emocionales</h2>@if (_result.EmotionReadings.Count == 0) { <p>Sin lecturas.</p> }@foreach (var reading in _result.EmotionReadings) { <p>@reading.Emotion · @reading.Score.ToString("P0") · @reading.CapturedAtUtc.ToLocalTime().ToString("g")</p> }</div>
+            <div class="sue-card"><h2 class="sue-card-title">Lecturas emocionales</h2>@if (_result.EmotionReadings.Count == 0) { <p>Sin lecturas.</p> }@foreach (var reading in _result.EmotionReadings) { <p>@EmotionLabel(reading.Emotion) · @reading.Score.ToString("P0") · @reading.CapturedAtUtc.ToLocalTime().ToString("g")</p> }</div>
             <div class="sue-card"><h2 class="sue-card-title">Expresiones derivadas</h2>@if (_result.AvatarExpressions.Count == 0) { <p>Sin expresiones.</p> }@foreach (var avatar in _result.AvatarExpressions) { <p>@avatar.ExpressionName · @avatar.Intensity.ToString("P0") @(avatar.IsFallback ? "(respaldo)" : "")</p> }</div>
         </div>
         <div class="sue-card"><h2 class="sue-card-title">Encuesta</h2>
@@ -436,6 +436,7 @@
     {
         "joy" => "Alegría", "neutral" => "Neutral", "sadness" => "Tristeza",
         "confusion" => "Confusión", "anger" => "Enojo", "surprise" => "Sorpresa",
+        "fear" => "Miedo", "disgust" => "Asco",
         null or "" => "—", _ => emotion
     };
 

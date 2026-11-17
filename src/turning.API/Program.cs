@@ -103,6 +103,9 @@ using (var scope = app.Services.CreateScope())
         app.Environment.IsDevelopment());
 }
 
+// En segundo plano: el primer turno no espera a que se embeba la base del filtro.
+_ = app.Services.GetRequiredService<Turning.Infrastructure.AI.Guard.RagConversationGuard>().WarmUpAsync();
+
 // Configurar middleware
 if (app.Environment.IsDevelopment())
 {

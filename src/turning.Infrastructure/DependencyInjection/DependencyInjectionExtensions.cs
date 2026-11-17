@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Turning.Application.Interfaces;
 using Turning.Infrastructure.AI;
 using Turning.Infrastructure.Persistence;
@@ -45,6 +46,17 @@ public static class DependencyInjectionExtensions
         // El lexico se lee del ensamblado una sola vez; el analizador no tiene estado.
         services.AddSingleton<Turning.Domain.Emotions.IEmotionLexicon, AI.Lexicon.EmbeddedJsonEmotionLexicon>();
         services.AddSingleton<Turning.Domain.Emotions.TextEmotionAnalyzer>();
+        services.Configure<AI.Emotions.EmotionsApiOptions>(configuration.GetSection(AI.Emotions.EmotionsApiOptions.SectionName));
+        services.AddHttpClient<ITextEmotionClassifierPort, AI.Emotions.EmotionsApiTextClassifier>();
+
+        // Filtro RAG previo al modelo. La base se carga aquí a propósito: si está mal formada, el API no arranca.
+        services.Configure<AI.Guard.GuardOptions>(configuration.GetSection(AI.Guard.GuardOptions.SectionName));
+        services.AddSingleton(AI.Guard.GuardKnowledge.LoadEmbedded());
+        services.AddHttpClient(AI.Guard.OllamaEmbeddingClient.ClientName);
+        services.AddSingleton<AI.Guard.IEmbeddingClient, AI.Guard.OllamaEmbeddingClient>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<AI.Guard.RagConversationGuard>();
+        services.AddSingleton<IConversationGuard>(sp => sp.GetRequiredService<AI.Guard.RagConversationGuard>());
         services.AddScoped<Turning.Application.Features.Emotions.IEmotionService, Services.EmotionService>();
         services.AddScoped<Turning.Application.Features.Emotions.IAvatarService, Services.AvatarService>();
         services.AddScoped<Turning.Application.Features.Surveys.ISurveyService, Services.SurveyAppService>();

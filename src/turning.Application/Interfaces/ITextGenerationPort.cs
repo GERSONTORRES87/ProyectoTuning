@@ -56,6 +56,9 @@ public sealed record TextGenerationRequest
 
     /// <summary>Contexto emocional del mensaje, si se pudo analizar.</summary>
     public EmotionContext? EmotionContext { get; init; }
+
+    /// <summary>Pautas recuperadas por el filtro para orientar esta respuesta.</summary>
+    public IReadOnlyList<string> Guidance { get; init; } = [];
 }
 
 /// <summary>

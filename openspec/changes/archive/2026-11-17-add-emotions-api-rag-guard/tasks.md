@@ -1,0 +1,35 @@
+# Tasks
+
+## 1. Emociones de la API de Héctor
+
+- [x] 1.1 Añadir `fear` y `disgust` a `EmotionLabel.All` y las etiquetas «Miedo» y «Asco» en la Web (`Admin.razor`, `Results.razor`, `Emotions.razor`, `EmotionDistributionChart.razor`). Verificar con pruebas del dominio que ambas son conocidas y que el avatar las deriva a `Neutral` con fallback.
+- [x] 1.2 Crear `ITextEmotionClassifierPort` y convertir `ITextEmotionAnalysisService` a `AnalyzeAsync`, con respaldo al léxico, intensidad y polaridad de la API; actualizar `ConversationTurnService`. Verificar con pruebas de Application: resultado de la API mapeado, puerto nulo o que lanza → léxico, polaridad e intensidad acotadas.
+- [x] 1.3 Implementar `EmotionsApiTextClassifier` con `EmotionsApi:*`. Verificar con pruebas de Infrastructure con un `HttpMessageHandler` falso: ruta, cuerpo, Bearer, mapeo de las 7 clases, `null` sin `BaseUrl`, ante `401`/`503`, tiempo límite y clase desconocida, y que el log no contiene token ni texto.
+
+## 2. Filtro RAG
+
+- [x] 2.1 Escribir la base `conversation-guard-es.json` (reglas de bloqueo, pautas por tema y por emoción) y su carga validada. Verificar con pruebas que la base incluida carga y que una regla sin respuesta falla con su id.
+- [x] 2.2 Crear `IConversationGuard`, `GuardDecision`, `TextGenerationRequest.Guidance` y su uso en `ConversationOrchestrator` y `OpenAiCompatibleTextGenerationProvider`; añadir `guard` al evento `AiReplyGenerated`. Verificar con pruebas: bloqueo sin llamar al puerto de generación, pautas en la instrucción de sistema, condición `Human` sin filtro. El campo `guard` queda fuera de la lista blanca de `EventProjection`; su prueba de proyección (`Events_HideProviderAndAiConditionFromParticipant`) necesita LocalDB y no corrió en Linux.
+- [x] 2.3 Implementar `RagConversationGuard` y el cliente de embeddings de Ollama con `Guard:*`, más el respaldo por palabras clave. Verificar con pruebas con embeddings falsos: bloqueo sobre el umbral, pautas por tema y emoción, palabras clave cuando el cliente falla o no está configurado.
+- [x] 2.4 Calibrar `Guard:BlockThreshold` y `Guard:GuideThreshold` contra `paraphrase-multilingual` con frases positivas y negativas por regla, y fijarlos como valores por defecto de `GuardOptions`. Verificar que ninguna frase negativa del set bloquea y que todas las de crisis lo hacen. La calibración del 2026-11-12 se hizo en PowerShell 5.1, que dañó las tildes de las frases de prueba e infló las similitudes: en producción «ayúdame con mi tarea de física» no se bloqueó (0.689 real frente a 0.897 medido). Recalibrado el 2026-11-14 en Python con UTF-8 sobre 79 frases (18 que deben bloquear y 61 cotidianas). Un primer ajuste bloqueó en producción «es que mi jefe me regañó delante de todos» por el ejemplo «¿cómo demando a mi jefe?»: se quitaron los ejemplos parecidos a frases cotidianas y esos casos pasaron a palabras clave. Resultado con umbrales 0.80 y 0.65: 78 de 79; ninguna cotidiana bloquea (máximo 0.758, «me quiero ir de esta ciudad») y las que bloquean solo por similitud empiezan en 0.832. Queda sin bloquear la ambigua «a veces siento que no quiero estar aquí» (0.754); el equipo decide si la añade como ejemplo de crisis.
+- [x] 2.5 Tono emocional y coloquial: reescribir `AiOptions.SystemPrompt` (persona colombiana, reacciona primero a la emoción, frases cortas, modismos con moderación, ejemplos de respuesta), nombrar la emoción en español en la instrucción de sistema y pasar las pautas por tema y por emoción y las respuestas aprobadas a registro coloquial. Verificar con 11 mensajes contra `qwen2.5:1.5b` que las respuestas reaccionan a la emoción y no usan frases de asistente (antes: «¿Hay algo más específico que necesites?»; ahora: «Uy, qué pesar. ¿Quedaste muy aburrido con el corte?»). Los ejemplos del prompt son de temas poco frecuentes porque el modelo copiaba al pie de la letra los de trabajo y universidad. Límite conocido de `qwen2.5:1.5b`: la pregunta de seguimiento a veces no tiene que ver con lo dicho («¿Cómo te fue con la maqueta?»); bajar la temperatura lo cambia por bucles, así que se dejó en 0.7 con la instrucción de no inventar hechos.
+- [x] 2.6 Instrucción base fija al inicio y emoción más pautas en un mensaje de sistema justo antes del último mensaje, para que el modelo local reutilice la caché del prompt. Medido en `sue-llm`: 576 tokens sin caché, 7.1 s; con el prefijo en caché, 0.24 s. Antes, con la emoción dentro de la instrucción base, el octavo mensaje de una sesión agotó los 9 s y respondió el adaptador por reglas. Verificar con la prueba `GenerateAsync_ShouldKeepTheBasePromptFixedAndPutTheTurnHintRightBeforeTheLastMessage` y con una conversación de 10 intercambios en producción: todas las respuestas del modelo, entre 3 y 7 s.
+
+## 3. Despliegue y documentación
+
+- [x] 3.1 Versionar `deploy/sue-llm/Dockerfile` y documentar `EmotionsApi__*`, `Guard__*` y los contenedores `sue-emotions` y `sue-llm` en `docs/deploy.md` y `docs/configuracion-secretos.md`. Verificar que `docker build` de ambas imágenes termina.
+- [x] 3.2 Ejecutar las suites en el contenedor Linux y `openspec validate add-emotions-api-rag-guard --strict`. Verificar que pasan, salvo las pruebas que requieren LocalDB.
+- [x] 3.3 Desplegar `sue-emotions`, `sue-llm` con embeddings y el API en Azure. Verificar `GET /health/ready` de `sue-emotions`, la cadena de IA en el arranque del API y que una frase de crisis enviada al filtro devuelve la respuesta aprobada. Desplegado el 2026-11-12 y probado de punta a punta el 2026-11-14 con una cuenta Participant en producción (API y Web 0.5.4-20261114-113827), sesiones `EXP-8793B63F` y `EXP-1DC2D398`:
+  - Crisis («ya no quiero seguir viviendo», por palabra clave, y «siento que mi vida no vale nada y quiero terminarla», solo por similitud): respuesta con las líneas 192, 106 y 123 en 1 s.
+  - Identidad («¿eres una inteligencia artificial?» y «¿esto lo escribe una computadora?») y fuera de alcance («ayúdame con mi tarea de física»): respuesta aprobada en 1 s, sin revelar la condición.
+  - No se bloquean «me cortaron el pelo muy corto», «estudio inteligencia artificial en la universidad» ni «es que mi jefe me regañó delante de todos».
+  - Emociones de la API: Miedo 100 %, Asco 100 %, Tristeza 97 % y Neutral, con los nombres en español.
+  - Conversación de 10 intercambios: todas las respuestas del modelo local, entre 3 y 7 s, en tono coloquial.
+  - Encuesta enviada con doble clic: una sola respuesta guardada. En Conversación, Emociones y Resultados del participante no aparece proveedor, modelo, filtro ni condición.
+  - Condición `Human` (`EXP-1FA7109A`, `EXP-E2AD6442`): ninguna respuesta automática, ni siquiera a una frase de crisis.
+  - Sin verificar: el JSON descargable del participante y la vista de Researcher con el campo `guard` (no hay cuenta Researcher en producción).
+  - Hallazgo fuera de este cambio: si el participante cambia de sección antes de que llegue la respuesta, la petición se cancela y esa respuesta no se genera.
+
+## Workflow follow-up
+
+- Archivar el cambio cuando el equipo revise las reglas, confirme las líneas de ayuda y quede desplegado.

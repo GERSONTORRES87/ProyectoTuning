@@ -16,6 +16,7 @@ namespace Turning.Application.Features.ConversationTurns;
 /// <param name="FailureReason">Motivo del fallo, cuando lo hubo.</param>
 /// <param name="Attempts">Intentos consumidos.</param>
 /// <param name="ProvidersTried">Proveedores recorridos, en orden.</param>
+/// <param name="Guard">Qué hizo el filtro previo al modelo (<see cref="Interfaces.GuardDecision.Trace"/>).</param>
 public sealed record InterlocutorReplyOutcome(
     string? Text,
     string Provider,
@@ -24,7 +25,8 @@ public sealed record InterlocutorReplyOutcome(
     bool Degraded,
     string? FailureReason,
     int Attempts,
-    IReadOnlyList<string>? ProvidersTried)
+    IReadOnlyList<string>? ProvidersTried,
+    string? Guard = null)
 {
     /// <summary>
     /// Indica si hay texto utilizable para persistir como turno del interlocutor.

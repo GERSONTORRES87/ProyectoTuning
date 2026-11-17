@@ -102,6 +102,8 @@ public class ConversationTurnTests
     [Theory]
     [InlineData("JOY", EmotionLabel.Joy)]
     [InlineData(" confusion ", EmotionLabel.Confusion)]
+    [InlineData("FEAR", EmotionLabel.Fear)]
+    [InlineData("disgust", EmotionLabel.Disgust)]
     [InlineData("platano", EmotionLabel.Neutral)]
     [InlineData(null, EmotionLabel.Neutral)]
     public void EmotionLabel_ShouldNormalizeToTheKnownVocabulary(string? input, string expected)
@@ -110,10 +112,12 @@ public class ConversationTurnTests
     }
 
     [Fact]
-    public void EmotionLabel_ShouldRecognizeOnlyTheSixLabelsOfTheRequirement()
+    public void EmotionLabel_ShouldRecognizeTheSixLabelsPlusFearAndDisgustOfTheEmotionsApi()
     {
-        EmotionLabel.All.Should().HaveCount(6);
+        EmotionLabel.All.Should().HaveCount(8);
         EmotionLabel.IsKnown("surprise").Should().BeTrue();
+        EmotionLabel.IsKnown("fear").Should().BeTrue();
+        EmotionLabel.IsKnown("disgust").Should().BeTrue();
         EmotionLabel.IsKnown("platano").Should().BeFalse();
     }
 }

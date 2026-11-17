@@ -32,6 +32,8 @@
                             <option value="sadness">Tristeza</option>
                             <option value="anger">Enojo</option>
                             <option value="surprise">Sorpresa</option>
+                            <option value="fear">Miedo</option>
+                            <option value="disgust">Asco</option>
                             <option value="neutral">Neutral</option>
                         </select>
                     </div>
@@ -72,7 +74,8 @@
     private static readonly IReadOnlyDictionary<string, string> EmotionColors = new Dictionary<string, string>
     {
         ["Alegría"] = "#E8C9A0", ["Neutral"] = "#B5C4B1", ["Tristeza"] = "#D4B8A7",
-        ["Enojo"] = "#C4957A", ["Sorpresa"] = "#D5C4D4", ["Confusión"] = "#C2B6CF"
+        ["Enojo"] = "#C4957A", ["Sorpresa"] = "#D5C4D4", ["Confusión"] = "#C2B6CF",
+        ["Miedo"] = "#B8C3D4", ["Asco"] = "#C6CBA3"
     };
 
     private async Task LoadAsync(ExperimentSessionSnapshotDto? session)
@@ -121,6 +124,7 @@
     private static string EmotionLabel(string emotion) => emotion.Trim().ToLowerInvariant() switch
     {
         "joy" => "Alegría", "neutral" => "Neutral", "sadness" => "Tristeza",
-        "anger" => "Enojo", "surprise" => "Sorpresa", "confusion" => "Confusión", _ => emotion.Trim()
+        "anger" => "Enojo", "surprise" => "Sorpresa", "confusion" => "Confusión",
+        "fear" => "Miedo", "disgust" => "Asco", _ => emotion.Trim()
     };
 }

@@ -22,6 +22,13 @@ Ambos contenedores escuchan en el puerto **8080** (coincide con el ingreso de Az
 Se publican las dos imágenes: el backend corrige permisos, eventos, avatar y configuración de IA, y el
 frontend cambia sus pantallas.
 
+Contenedores internos de apoyo (ingreso interno, una réplica fija):
+
+| Servicio | Contexto de build | Puerto | Recursos | Para qué |
+|---|---|---|---|---|
+| sue-llm | `deploy/sue-llm` | 11434 | 4 vCPU / 8 GiB | Ollama solo CPU: `qwen2.5:1.5b` responde la condición AI y `paraphrase-multilingual` da los embeddings del filtro RAG |
+| sue-emotions | `services/emotions-api` (código de Héctor, sin cambios) | 8000 | 2 vCPU / 4 GiB | Emoción del texto del participante (`POST /api/v1/emotions/text`); descarga sus modelos de Hugging Face al arrancar |
+
 ## Configuración (solo nombres; los valores no van en el repositorio ni en la imagen)
 
 | Servicio | Variable | Tipo |
@@ -36,9 +43,17 @@ frontend cambia sus pantallas.
 | API | `Email__From`, `Email__Smtp__Username` (cuenta Gmail dedicada a SUE, nunca `proinvsemillero@gmail.com`) | valor |
 | API | `Email__Smtp__Host=smtp.gmail.com`, `Email__Smtp__Port=587` | valor |
 | API | `Email__Smtp__Password` (contraseña de aplicación de Gmail) | secreto |
+| API | `EmotionsApi__BaseUrl` (hostname interno de sue-emotions) | valor, opcional |
+| API | `EmotionsApi__Token` (mismo valor que `API_TOKEN` de sue-emotions) | secreto |
+| API | `Guard__EmbeddingsBaseUrl` (hostname interno de sue-llm) | valor, opcional |
+| API | `Guard__BlockThreshold`, `Guard__GuideThreshold` | valor, opcional (por defecto 0.80 y 0.65) |
+| API | `Ai__OpenAi__Name=local`, `Ai__OpenAi__BaseUrl` (sue-llm `/v1/`), `Ai__OpenAi__Model=qwen2.5:1.5b`, `Ai__OpenAi__ApiKey=ollama` | valor (modelo local en la ranura OpenAI hasta `add-admin-ai-provider-settings`) |
+| sue-emotions | `API_TOKEN` | secreto |
+| sue-emotions | `RATE_LIMIT_PER_MINUTE=600` | valor (todo el tráfico llega desde la IP del API) |
 | Web | `Api__BaseUrl` (hostname interno del backend) | valor |
 
-Más detalle en `docs/configuracion-secretos.md`. Sin claves de IA el sistema arranca igual y
+Más detalle en `docs/configuracion-secretos.md`. Sin `EmotionsApi__BaseUrl` la emoción sale del léxico
+local; sin `Guard__EmbeddingsBaseUrl` el filtro solo bloquea por palabras clave. Sin claves de IA el sistema arranca igual y
 responde con el adaptador por reglas, marcado como degradado. Sin la cuenta de correo también
 arranca, con una advertencia, pero el restablecimiento de contraseña no entrega ningún correo.
 

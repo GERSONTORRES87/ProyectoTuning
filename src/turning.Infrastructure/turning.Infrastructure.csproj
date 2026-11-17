@@ -18,6 +18,7 @@
          lee el ".es" como codigo de cultura, marca el recurso como satelite y lo saca del
          ensamblado principal. El archivo ya evita el punto, y esto lo deja fijado. -->
     <EmbeddedResource Include="AI\Lexicon\emotion-lexicon-es.json" LogicalName="turning.Infrastructure.AI.Lexicon.emotion-lexicon-es.json" />
+    <EmbeddedResource Include="AI\Guard\conversation-guard-es.json" LogicalName="turning.Infrastructure.AI.Guard.conversation-guard-es.json" />
   </ItemGroup>
 
   <ItemGroup>

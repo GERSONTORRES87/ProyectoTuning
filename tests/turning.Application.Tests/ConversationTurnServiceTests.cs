@@ -35,7 +35,7 @@ public class ConversationTurnServiceTests
     public ConversationTurnServiceTests()
     {
         _conversationTurnRepository.TrySaveReplyAsync(Arg.Any<CancellationToken>()).Returns(true);
-        _emotionAnalysis.Analyze(Arg.Any<string>()).Returns(new TextEmotionDto(
+        _emotionAnalysis.AnalyzeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new TextEmotionDto(
             EmotionId: "neutral",
             Confidence: 0,
             Intensity: 0.3,

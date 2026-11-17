@@ -12,7 +12,7 @@ namespace Turning.Application.Features.Emotions;
 /// <c>fallback</c> cuando se aplicó el resultado neutral obligatorio.
 /// </param>
 /// <param name="FallbackUsed">Indica si se recurrió al fallback.</param>
-/// <param name="ModelVersion">Versión del léxico usado, para poder reproducir el análisis.</param>
+/// <param name="ModelVersion">Versión del modelo o del léxico usado, para poder reproducir el análisis.</param>
 /// <param name="LatencyMs">Tiempo que tomó el análisis.</param>
 /// <param name="Scores">Distribución por etiqueta, serializada por el llamante si la persiste.</param>
 public sealed record TextEmotionDto(
@@ -44,8 +44,9 @@ public sealed record TextEmotionDto(
 public interface ITextEmotionAnalysisService
 {
     /// <summary>
-    /// Analiza un texto. Nunca lanza: ante cualquier problema devuelve el resultado neutral
-    /// de fallback, porque una emoción no detectada no puede costar el turno del participante.
+    /// Analiza un texto con el clasificador externo y, si no responde, con el léxico local. Solo
+    /// lanza si el llamante cancela: ante cualquier otro problema devuelve el resultado neutral de
+    /// fallback, porque una emoción no detectada no puede costar el turno del participante.
     /// </summary>
-    TextEmotionDto Analyze(string? text);
+    Task<TextEmotionDto> AnalyzeAsync(string? text, CancellationToken cancellationToken = default);
 }

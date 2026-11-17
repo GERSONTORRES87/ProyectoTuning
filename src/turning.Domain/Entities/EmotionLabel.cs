@@ -10,8 +10,8 @@ namespace Turning.Domain.Entities;
 /// filas persistidas. Endurecerla rompería <c>POST /api/sessions/{id}/emotions</c>.
 /// La validación se aplica solo en la ruta de análisis de texto.
 ///
-/// <see cref="Confusion"/> no tiene expresión propia de avatar: se mapea a Neutral con
-/// marca de fallback. Añadir la sexta expresión exige un asset del lado del avatar y es
+/// <see cref="Confusion"/>, <see cref="Fear"/> y <see cref="Disgust"/> no tienen expresión
+/// propia de avatar: se mapean a Neutral con marca de fallback. Añadir la sexta expresión exige un asset del lado del avatar y es
 /// una decisión del equipo, no de este código.
 /// </remarks>
 public static class EmotionLabel
@@ -28,6 +28,12 @@ public static class EmotionLabel
     /// <summary>Sorpresa.</summary>
     public const string Surprise = "surprise";
 
+    /// <summary>Miedo. Sin expresión propia de avatar; lo produce la API de emociones.</summary>
+    public const string Fear = "fear";
+
+    /// <summary>Asco. Sin expresión propia de avatar; lo produce la API de emociones.</summary>
+    public const string Disgust = "disgust";
+
     /// <summary>Confusión. Sin expresión propia de avatar.</summary>
     public const string Confusion = "confusion";
 
@@ -42,7 +48,7 @@ public static class EmotionLabel
     /// <summary>
     /// Todas las etiquetas reconocidas.
     /// </summary>
-    public static readonly IReadOnlyList<string> All = [Joy, Sadness, Anger, Surprise, Confusion, Neutral];
+    public static readonly IReadOnlyList<string> All = [Joy, Sadness, Anger, Surprise, Fear, Disgust, Confusion, Neutral];
 
     /// <summary>
     /// Indica si la etiqueta pertenece al vocabulario conocido.

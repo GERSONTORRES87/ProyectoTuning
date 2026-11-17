@@ -31,11 +31,14 @@ public class AvatarExpressionTests
         expression.Intensity.Should().Be(0.6);
     }
 
-    [Fact]
-    public void FromReading_StillFlagsAnEmotionWithoutItsOwnExpression()
+    [Theory]
+    // "confusion" ya caia en Neutral; "fear" y "disgust" llegan de la API de emociones y tampoco tienen expresion.
+    [InlineData(EmotionLabel.Confusion)]
+    [InlineData(EmotionLabel.Fear)]
+    [InlineData(EmotionLabel.Disgust)]
+    public void FromReading_StillFlagsAnEmotionWithoutItsOwnExpression(string emotion)
     {
-        // Comportamiento previo: "confusion" no tiene expresion y cae en Neutral.
-        var expression = AvatarExpression.FromReading(Reading("confusion", 0.8));
+        var expression = AvatarExpression.FromReading(Reading(emotion, 0.8));
 
         expression.ExpressionName.Should().Be("Neutral");
         expression.IsFallback.Should().BeTrue();

@@ -14,9 +14,13 @@ namespace Turning.Application.Tests;
 public class ConversationOrchestratorTests
 {
     private readonly ITextGenerationPort _textGenerationPort = Substitute.For<ITextGenerationPort>();
+    private readonly IConversationGuard _guard = Substitute.For<IConversationGuard>();
+
+    public ConversationOrchestratorTests() =>
+        _guard.EvaluateAsync(default!, default, default).ReturnsForAnyArgs(GuardDecision.PassThrough);
 
     private ConversationOrchestrator CreateOrchestrator() =>
-        new(_textGenerationPort, NullLogger<ConversationOrchestrator>.Instance);
+        new(_textGenerationPort, _guard, NullLogger<ConversationOrchestrator>.Instance);
 
     private static ConversationTurn ParticipantTurn(Guid sessionId, int sequence = 1, string message = "Hola.") =>
         ConversationTurn.Create(sessionId, sequence, ConversationActor.Participant, message);
@@ -130,5 +134,68 @@ public class ConversationOrchestratorTests
         outcome.Attempts.Should().Be(2);
         outcome.ProvidersTried.Should().ContainInOrder("openai", "openrouter");
         outcome.Degraded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResolveReplyAsync_ShouldAnswerWithTheApprovedResponse_WhenTheGuardBlocks()
+    {
+        var orchestrator = CreateOrchestrator();
+        var session = ExperimentSession.Create(Guid.NewGuid(), ExperimentalCondition.AI);
+        _guard.EvaluateAsync("ya no quiero vivir", EmotionLabel.Sadness, Arg.Any<CancellationToken>())
+            .Returns(new GuardDecision(GuardMode.Blocked, "crisis", "Respuesta aprobada.", [], []));
+
+        var outcome = await orchestrator.ResolveReplyAsync(session, ParticipantTurn(session.Id, message: "ya no quiero vivir"), [],
+            new EmotionContext(EmotionLabel.Sadness, 0.9, 0.8, "text_analysis"));
+
+        outcome!.Text.Should().Be("Respuesta aprobada.");
+        outcome.Provider.Should().Be(ConversationOrchestrator.GuardProvider);
+        outcome.Model.Should().Be("crisis");
+        outcome.Degraded.Should().BeFalse();
+        outcome.Guard.Should().Be("blocked:crisis");
+        await _textGenerationPort.DidNotReceive().GenerateAsync(Arg.Any<TextGenerationRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveReplyAsync_ShouldSendTheGuidanceToTheModel_WhenTheGuardDoesNotBlock()
+    {
+        var orchestrator = CreateOrchestrator();
+        var session = ExperimentSession.Create(Guid.NewGuid(), ExperimentalCondition.AI);
+        _guard.EvaluateAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new GuardDecision(GuardMode.Context, null, null, ["Valida la pérdida."], ["duelo"]));
+        _textGenerationPort.GenerateAsync(Arg.Any<TextGenerationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new TextGenerationResult("Lo siento mucho.", "local", 900, false));
+
+        var outcome = await orchestrator.ResolveReplyAsync(session, ParticipantTurn(session.Id), []);
+
+        outcome!.Guard.Should().Be("context:duelo");
+        await _textGenerationPort.Received(1).GenerateAsync(
+            Arg.Is<TextGenerationRequest>(request => request.Guidance.SequenceEqual(new[] { "Valida la pérdida." })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveReplyAsync_ShouldNotFilter_HumanSessions()
+    {
+        var session = ExperimentSession.Create(Guid.NewGuid(), ExperimentalCondition.Human);
+
+        await CreateOrchestrator().ResolveReplyAsync(session, ParticipantTurn(session.Id), []);
+
+        await _guard.DidNotReceiveWithAnyArgs().EvaluateAsync(default!, default, default);
+    }
+
+    [Fact]
+    public async Task ResolveReplyAsync_ShouldStillGenerate_WhenTheGuardFailsUnexpectedly()
+    {
+        var orchestrator = CreateOrchestrator();
+        var session = ExperimentSession.Create(Guid.NewGuid(), ExperimentalCondition.AI);
+        _guard.EvaluateAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns<GuardDecision>(_ => throw new InvalidOperationException("índice roto"));
+        _textGenerationPort.GenerateAsync(Arg.Any<TextGenerationRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new TextGenerationResult("Hola.", "local", 900, false));
+
+        var outcome = await orchestrator.ResolveReplyAsync(session, ParticipantTurn(session.Id), []);
+
+        outcome!.Text.Should().Be("Hola.");
+        outcome.Guard.Should().Be("keywords");
     }
 }

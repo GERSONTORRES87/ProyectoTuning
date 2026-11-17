@@ -10,7 +10,11 @@ namespace Turning.Application.Features.ConversationTurns;
 /// </summary>
 public sealed class ConversationOrchestrator : IConversationOrchestrator
 {
+    /// <summary>Proveedor que figura cuando responde una regla del filtro en lugar del modelo.</summary>
+    public const string GuardProvider = "guard";
+
     private readonly ITextGenerationPort _textGenerationPort;
+    private readonly IConversationGuard _guard;
     private readonly ILogger<ConversationOrchestrator> _logger;
 
     /// <summary>
@@ -18,9 +22,11 @@ public sealed class ConversationOrchestrator : IConversationOrchestrator
     /// </summary>
     public ConversationOrchestrator(
         ITextGenerationPort textGenerationPort,
+        IConversationGuard guard,
         ILogger<ConversationOrchestrator> logger)
     {
         _textGenerationPort = textGenerationPort;
+        _guard = guard;
         _logger = logger;
     }
 
@@ -46,16 +52,33 @@ public sealed class ConversationOrchestrator : IConversationOrchestrator
         if (participantTurn.Sender != ConversationActor.Participant)
             return null;
 
+        var stopwatch = Stopwatch.StartNew();
+        var guard = await EvaluateGuardAsync(participantTurn, emotionContext, cancellationToken);
+
+        if (guard.Blocked)
+        {
+            // Respuesta aprobada: el mensaje no llega al modelo. No es una degradación, es la política.
+            return new InterlocutorReplyOutcome(
+                Text: guard.Response,
+                Provider: GuardProvider,
+                Model: guard.RuleId,
+                LatencyMs: stopwatch.ElapsedMilliseconds,
+                Degraded: false,
+                FailureReason: null,
+                Attempts: 0,
+                ProvidersTried: null,
+                Guard: guard.Trace);
+        }
+
         var request = new TextGenerationRequest
         {
             SessionId = session.Id,
             OriginatingTurnId = participantTurn.Id,
             UserInput = participantTurn.Message,
             ConversationHistory = ConversationHistoryBuilder.Build(previousTurns),
-            EmotionContext = emotionContext
+            EmotionContext = emotionContext,
+            Guidance = guard.Guidance
         };
-
-        var stopwatch = Stopwatch.StartNew();
 
         try
         {
@@ -77,7 +100,8 @@ public sealed class ConversationOrchestrator : IConversationOrchestrator
                 Degraded: result.Degraded,
                 FailureReason: result.FailureReason,
                 Attempts: result.Attempts,
-                ProvidersTried: result.ProvidersTried);
+                ProvidersTried: result.ProvidersTried,
+                Guard: guard.Trace);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -104,7 +128,27 @@ public sealed class ConversationOrchestrator : IConversationOrchestrator
                 Degraded: true,
                 FailureReason: ex.GetType().Name,
                 Attempts: 1,
-                ProvidersTried: null);
+                ProvidersTried: null,
+                Guard: guard.Trace);
+        }
+    }
+
+    private async Task<GuardDecision> EvaluateGuardAsync(
+        ConversationTurn participantTurn, EmotionContext? emotionContext, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _guard.EvaluateAsync(participantTurn.Message, emotionContext?.EmotionId, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // El filtro ya degrada por su cuenta; esto cubre un fallo inesperado para no perder el turno.
+            _logger.LogError(ex, "Falló el filtro previo al modelo para el turno {TurnId}", participantTurn.Id);
+            return GuardDecision.PassThrough;
         }
     }
 }

@@ -167,6 +167,30 @@ configura las variables de la tabla.
 Fuera de Development, si falta `Email:Smtp:Host` o `PasswordReset:BaseUrl`, la API arranca igual
 y registra una advertencia: el resto de la plataforma funciona, pero no llega ningún correo.
 
+## API de emociones y filtro RAG
+
+La emoción del texto del participante la calcula la API de emociones de Héctor Restrepo
+(`services/emotions-api`). SUE la llama con un token Bearer, que es **secreto**: el mismo valor va en
+`API_TOKEN` del servicio y en `EmotionsApi:Token` del API de SUE.
+
+```powershell
+# desarrollo: levantar services/emotions-api (ver su README) y apuntar el API a ella
+dotnet user-secrets --project src/turning.API set "EmotionsApi:BaseUrl" "http://localhost:8000/"
+dotnet user-secrets --project src/turning.API set "EmotionsApi:Token" "<el API_TOKEN del servicio>"
+```
+
+Sin `EmotionsApi:BaseUrl` no se hace ninguna llamada y la emoción sale del léxico local, como antes.
+
+El filtro previo al modelo (`Guard`) usa embeddings de Ollama (`paraphrase-multilingual`). En local,
+`docker run -p 11434:11434` de la imagen de `deploy/sue-llm` y `Guard:EmbeddingsBaseUrl=http://localhost:11434/`.
+Sin esa URL el filtro solo bloquea por palabras clave. La base de reglas y pautas está en
+`src/turning.Infrastructure/AI/Guard/conversation-guard-es.json`; si se edita, el API valida su forma
+al arrancar y no arranca con una regla sin respuesta.
+
+**Antes de un ensayo real**, el equipo debe revisar las respuestas aprobadas, en especial las líneas
+de ayuda de la regla `crisis` (192 opción 4, Línea 106 de Bogotá y 123), y la respuesta a
+«¿eres una IA?», que es una decisión metodológica.
+
 ## Pendiente
 
 La clave que estuvo en el historial de git seguirá siendo visible ahí. Como nunca

@@ -131,7 +131,9 @@ public sealed class ConversationTurnService : IConversationTurnService
         // El análisis emocional corre sobre el texto del participante (RF-AES-01) y alimenta
         // tanto el avatar como el contexto que recibe la IA. Nunca lanza: como mucho devuelve
         // el resultado neutral de fallback.
-        var emotion = sender == ConversationActor.Participant ? _emotionAnalysis.Analyze(turn.Message) : null;
+        var emotion = sender == ConversationActor.Participant
+            ? await _emotionAnalysis.AnalyzeAsync(turn.Message, cancellationToken)
+            : null;
         if (emotion is not null)
             await PersistEmotionAsync(session, turn, emotion, cancellationToken);
 
@@ -187,7 +189,9 @@ public sealed class ConversationTurnService : IConversationTurnService
                 provider = outcome.Provider,
                 model = outcome.Model,
                 latencyMs = outcome.LatencyMs,
-                degraded = outcome.Degraded
+                degraded = outcome.Degraded,
+                // Fuera de la lista blanca de EventProjection: el participante no lo ve.
+                guard = outcome.Guard
             });
         }
 
