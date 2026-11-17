@@ -46,7 +46,7 @@ Contenedores internos de apoyo (ingreso interno, una réplica fija):
 | API | `EmotionsApi__BaseUrl` (hostname interno de sue-emotions) | valor, opcional |
 | API | `EmotionsApi__Token` (mismo valor que `API_TOKEN` de sue-emotions) | secreto |
 | API | `Guard__EmbeddingsBaseUrl` (hostname interno de sue-llm) | valor, opcional |
-| API | `Guard__BlockThreshold`, `Guard__GuideThreshold` | valor, opcional (por defecto 0.76 y 0.65) |
+| API | `Guard__BlockThreshold`, `Guard__GuideThreshold` | valor, opcional (por defecto 0.80 y 0.65) |
 | API | `Ai__OpenAi__Name=local`, `Ai__OpenAi__BaseUrl` (sue-llm `/v1/`), `Ai__OpenAi__Model=qwen2.5:1.5b`, `Ai__OpenAi__ApiKey=ollama` | valor (modelo local en la ranura OpenAI hasta `add-admin-ai-provider-settings`) |
 | sue-emotions | `API_TOKEN` | secreto |
 | sue-emotions | `RATE_LIMIT_PER_MINUTE=600` | valor (todo el tráfico llega desde la IP del API) |

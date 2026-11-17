@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Web** | https://sue-front-end.bluemushroom-526950a2.eastus.azurecontainerapps.io |
-| **Versión** | API y Web `0.5.1-20261112-154751` (Azure, *Production*) |
+| **Versión** | API `0.5.5-20261114-115804` y Web `0.5.4-20261114-113827` (Azure, *Production*) |
 | **Modalidad** | Individual: cada QA del semillero ejecuta todo. **≈ 60 min** |
 | **Casos** | 10 vitales + 1 opcional de administración |
 
