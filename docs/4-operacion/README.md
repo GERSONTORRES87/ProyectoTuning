@@ -6,6 +6,6 @@ Documentos existentes (se enlazan desde aquí y se mantienen en su ubicación ac
 - [deploy.md](../deploy.md): guía de despliegue en Azure, donde SUE ya está publicado.
 - Smoke test: [scripts/smoke.ps1](../../scripts/smoke.ps1), se ejecuta desde la raíz del repo con `./scripts/smoke.ps1`.
 
-Pendiente:
-- `smoke-test.md`: cómo correr el smoke test e interpretar el resultado.
-- `troubleshooting.md`: errores comunes y soluciones.
+Documentos de esta pauta:
+- [smoke-test.md](smoke-test.md): cómo correr el smoke test e interpretar el resultado.
+- [troubleshooting.md](troubleshooting.md): errores comunes y soluciones.
