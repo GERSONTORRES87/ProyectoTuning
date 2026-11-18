@@ -1,6 +1,6 @@
 # Documentación — Turning
 
-Organizada según las 6 pautas aprobadas por el profesor.
+Organizada según las 6 pautas aprobadas por el profesor. El vocabulario común está en el [glosario](6-convenciones/glosario.md).
 
 | Pauta | Carpeta | Responsable de migración |
 |---|---|---|
@@ -11,8 +11,13 @@ Organizada según las 6 pautas aprobadas por el profesor.
 | 5. Proceso de desarrollo | [5-desarrollo](5-desarrollo/) | Juan |
 | 6. Convenciones técnicas | [6-convenciones](6-convenciones/) | Por definir |
 
-Reglas de la migración:
+Reglas de la migración de documentos:
 - Los scripts (`scripts/`) no se mueven: se enlazan desde aquí, porque se ejecutan con esa ruta.
 - El dataset (`data/`) tampoco se mueve: es un archivo de datos, no un documento. Desde el 23 de octubre el código ya no lo carga automáticamente.
 - Los specs viven en `openspec/`: se enlazan, no se copian.
+- Un documento que otros archivos referencian con su ruta actual se enlaza desde su pauta, no se mueve.
 - Cada responsable mueve solo sus archivos, con `git mv`, en un PR propio.
+
+## Documentos pendientes de ubicar
+
+Los documentos que todavía no tienen carpeta de pauta están en la [clasificación de documentos](clasificacion-documentos.md), una propuesta del equipo de documentación. La decisión final la aprueba el profesor; después, cada responsable sube el cambio en su PR.
