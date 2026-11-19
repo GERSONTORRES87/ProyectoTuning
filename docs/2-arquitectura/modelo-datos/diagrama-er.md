@@ -60,7 +60,7 @@ erDiagram
 
     ConditionAssignments {
         uniqueidentifier Id PK
-        uniqueidentifier SessionId FK UK
+        uniqueidentifier SessionId FK, UK
         nvarchar Condition
         nvarchar Strategy
         nvarchar Reason

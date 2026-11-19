@@ -213,11 +213,7 @@ hitos), pensada para trazabilidad y depuración sin acoplarse a una tabla espec�
 | OccurredAtUtc | datetime2 | Momento en que ocurrió el evento. |
 | ExpiresAtUtc | datetime2 | Momento a partir del cual el evento puede purgarse/archivarse. |
 
-**Uso previsto (contrato AI):** cuando el adaptador de generación de texto
-(`ITextGenerationPort`) opera en modo degradado, debería registrarse aquí un evento
-de tipo `DegradedOperation` (pendiente de conectar — actualmente el adaptador
-reporta `degraded=true` en su resultado, pero la persistencia del evento en esta
-tabla queda como trabajo futuro, fuera del alcance de esta entrega).
+**Uso (contrato AI):** cuando la generación de texto (`ITextGenerationPort`) o el análisis de emociones operan en modo degradado, se registra aquí un evento de tipo `DegradedOperation`. Lo publica `ExperimentEventPublisher` y se guarda junto con el resto de la operación.
 
 ---
 
